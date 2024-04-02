@@ -1,0 +1,9 @@
+name: llamero
+version: 0.1.0
+
+authors:
+  - crimson-knight <crimsonknightstudios@gmail.com>
+
+crystal: '>= 1.11.2'
+
+license: MIT
