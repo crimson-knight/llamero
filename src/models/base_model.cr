@@ -7,39 +7,63 @@
 #   - managing the model's context window (token length)
 #
 # Logs are always disabled with --log-disable when running from within this app
-class LlamaCpp
+class Llamero::BaseModel
 
+  # This should be the full filename of the model, including the .gguf file extension
   property model_name : String = "llama-2-13b-chat.Q6_K.gguf"
+
+  # The directory where any grammar files will be located
   property grammar_root_path : Path = Path["/Users/#{`whoami`.strip}/.agentc/grammars"]
+  
+  # The directory where any lora filters will be located. This is optional, but if you want to use lora filters, you will need to specify this. Lora filters are specific per model they were fine-tune from.
   property lora_root_path : Path = Path["/Users/#{`whoami`.strip}/.agentc/loras"]
+  
+  # The directory where the model files will be located. This is required.
   property model_root_path : Path = Path["/Users/#{`whoami`.strip}/.agentc/models"]
 
   # Adjust up to punish repetitions more harshly, lower for more monotonous responses. Default: 1.1
   property repeat_pentalty : Float32 = 1.1 # --repeat-penalty
 
   # Adjust up to get more unique responses, adjust down to get more "probable" responses. Default: 40
-  property top_k_sampling : Int32 = 80 # --top-k
+  property top_k_sampling : Int32 = 40 # --top-k
 
-  # Number of threads. Should be set to the number of physical cores, not logical cores. The M1 Max has a 10 core CPU and 32 core GPU. Let's try it with 32 to start
-  property threads : Int32 = 32 # --threads
+  # Number of threads. Should be set to the number of physical cores, not logical cores. Default is 12, but should be configured per system for optimal performance.
+  property threads : Int32 = 12 # --threads
 
   # This is just the name of the grammer file, relative to the grammar_root_path. If it's blank, it's not included in the execute command
   property grammer_file : String = "" # --grammer-file
 
-  # Defaults are too small in the model binary (512) so setting this to 2048, which is what Llama models were trained using.
+  # Defaults are too small in the model binary (512) so setting this to 2048, which is what Llama models were trained using. 
+  # This should allow for worry-free context windows across many models.
   property context_size : Int32 = 2048 # --ctx-size
 
-  # Adjust up or down to play with creativity
+  # Adjust up or down to play with creativity. Default: 0.9
   property temperature : Float32 = 0.9 # --temperature
 
-  # This is just a good idea, it helps keep the original prompt in the context window. This should keep the model more focused on the original topic.
+  # This is just a good idea, it helps keep the original prompt in the context window. This should keep the model more focused on the original topic. You will need to calculate the tokens to include here.
+  # :nodoc:
   property keep : String = "" # --keep or --keep N where `N` is the number of tokens to refresh into the context window
 
   # Setting this changes how many tokens are trying to be predicted at a time. Setting this to -1 will generate tokens infinitely, but causes the context window to reset frequently.
   # Setting this to -2 stops generating as soon as the context window fills up
-  property n_predict : Int32 = 1000
+  # Default: 1024
+  property n_predict : Int32 = 1024
   # Note, this is probably going to need to be adapted to be more dynamic based on some kind of tokenization lib. Probably will need to bind to it with C functions
 
+  def initialize(model_name : String? = nil, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, repeat_pentalty : Float32? = nil, top_k_sampling : Int32? = nil, threads : Int32? = nil, grammer_file : String? = nil, context_size : Int32? = nil, temperature : Float32? = nil, keep : String? = nil, n_predict : Int32? = nil)
+    @model_name = model_name if model_name
+    @grammar_root_path = grammar_root_path if grammar_root_path
+    @lora_root_path = lora_root_path if lora_root_path
+    @model_root_path = model_root_path if model_root_path
+    @repeat_pentalty = repeat_pentalty if repeat_pentalty
+    @top_k_sampling = top_k_sampling if top_k_sampling
+    @threads = threads if threads
+    @grammer_file = grammer_file if grammer_file
+    @context_size = context_size if context_size
+    @temperature = temperature if temperature
+    @keep = keep if keep
+    @n_predict = n_predict if n_predict
+  end
 
   def chat(messages : Array(NamedTuple(role: String, content: String)), model : String = model_name, temperature : Float32 = @temperature, max_tokens : Int32 = @context_size, grammar_file = "", repeat_penalty = @repeat_pentalty, top_k_sampling = @top_k_sampling, n_predict = @n_predict)
     if grammar_file.blank?
