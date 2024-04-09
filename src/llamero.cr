@@ -1,3 +1,6 @@
+require "./prompts/**"
+require "./models/**"
+
 # TODO: Write documentation for `Llamero`
 module Llamero
   VERSION = "0.1.0"

@@ -1,9 +1,6 @@
 require "./spec_helper"
 
 describe Llamero do
-  # TODO: Write tests
+  # TODO: Write tests for the suite as a whole
 
-  it "works" do
-    false.should eq(true)
-  end
 end
