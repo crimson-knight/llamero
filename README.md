@@ -4,7 +4,7 @@
 
 Currently, you will need to clone the llama.cpp repo, build it and symlink the bin to /usr/local/bin/llamacpp for this shard to work as intended.
 
-You will also need python 3.12 or later.
+You will also need python 3.12 or later and pip
 
 ```
 brew install python3 pip
@@ -12,9 +12,13 @@ brew install python3 pip
 
 Then you can clone and build llama.cpp
 
+**Important Note: these instructions tie you to an older release of llama.cpp due to a bug that was introduced around late Feb 2024 - March 2024. This bug has not been fixed as of yet, which breaks this shard entirely because the llama.cpp binary will not execute from the symbolic link we want to create for running it outside of the llama.cpp directory.**
+
 ```bash
-cd ~/ && git clone git@github.com:ggerganov/llama.cpp.git && cd llama.cpp && make
+cd ~/ && git clone git@github.com:ggerganov/llama.cpp.git && cd llama.cpp && git fetch --tags && git checkout f1a98c52 && make
 ```
+
+**You will now be on a stable version of llama.cpp and able to make the symbolic link to run this shard. You will be in a detached HEAD state, so you will need to checkout the `f1a98c52` commit if you intend to switch to master/main or another release.**
 
 Now create the symlink for the main binary, run this from within the llama.cpp directory root
 
@@ -23,10 +27,6 @@ For Mac users, this command will create a symlink for you
 sudo ln -s /Users/${whoami}/llama.cpp/main /usr/local/bin/llamacpp
 ```
 
-For linux:
-```bash
-sudo ln -s /home/${whoami}/llama.cpp/main /usr/local/bin/llamacpp
-```
 
 You will also need to download some models. This is a quick reference list. You can choose any model that's already quantized into gguf, or you can convert your own models using the llama.cpp quantization tool.
 

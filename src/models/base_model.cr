@@ -66,7 +66,7 @@ class Llamero::BaseModel
   property chat_template_user_prompt_opening_wrapper : String = ""
   property chat_template_user_prompt_closing_wrapper : String = ""
 
-  property unique_token_at_the_end_of_the_prompt_to_split_on : String = "\n\r\rAssistant:\n\n"
+  property unique_token_at_the_end_of_the_prompt_to_split_on : String = "\n\r\rAssistant:\n"
 
   # Note, this is probably going to need to be adapted to be more dynamic based on some kind of tokenization lib. Probably will need to bind to it with C functions/lib
 
@@ -174,49 +174,52 @@ class Llamero::BaseModel
 
     process_id_channel = Channel(Int64).new(capacity: 1)
     process_output_channel = Channel(IO).new(capacity: 1)
+    error_channel = Channel(String).new(capacity: 1)
     query_count_incrementer_channel = Channel(Int32).new(capacity: 1)
-    successfully_completed_chat_completion_channel = Channel(Bool).new(capacity: 1)
 
-    while query_count < 5 || successfully_completed_chat_completion != true
+    while query_count < 5
       spawn do
         begin
-          puts "About to execute the models process"
-          puts query_count
-          current_process = Process.new("llamacpp -m \"#{model_root_path.join(@model_name)}\" #{grammar_file_command} --n-predict #{@n_predict} --threads #{@threads} --ctx-size #{@context_size} --temp #{@temperature} --top-k #{@top_k_sampling} --repeat-penalty #{@repeat_pentalty} --log-disable --prompt \"#{final_prompt_text}\"", shell: true, input: Process::Redirect::Close, output: Process::Redirect::Pipe, error: Process::Redirect::Close)
+          output_io = IO::Memory.new
+          error_io = IO::Memory.new
+          
+          current_process = Process.new("llamacpp -m \"#{model_root_path.join(@model_name)}\" #{grammar_file_command} --n-predict #{@n_predict} --threads #{@threads} --ctx-size #{@context_size} --temp #{@temperature} --top-k #{@top_k_sampling} --repeat-penalty #{@repeat_pentalty} --log-disable --prompt \"#{final_prompt_text}\"", shell: true, input: Process::Redirect::Pipe, output: output_io, error: error_io)
           process_id_channel.send(current_process.pid)
-          process_output_channel.send(current_process.output)
           current_process.wait
-          successfully_completed_chat_completion_channel.send(true)
-          query_count_incrementer_channel.send(5)
-          puts "The process has completed"
+          
+          if error_io.rewind.gets_to_end.blank?
+            query_count_incrementer_channel.send(5)
+            process_output_channel.send(output_io.rewind)
+          else
+            query_count_incrementer_channel.send(1)
+            error_channel.send(error_io.rewind.gets_to_end)
+          end
         rescue e
-          puts "An error occured..."
-          puts e.inspect
-          Log.warn { "error was rescued while trying to query the llm" }
+          Log.warn { "error was rescued while trying to query the llm, error: #{e.message}" }
           query_count_incrementer_channel.send(1)
           content["content"] = "error was rescued while trying to query the llm"
         end
       end
-
-      
+ 
       Log.info { "The AI is now processing... please wait" }
       
       # Multi-threaded keyword here, this acts like a blocking mechanism to allow for reflecting on the previously spawned fiber
       select
+      when error_recieved = error_channel.receive
+        Log.error { "An error occured while processing the LLM: #{error_recieved}" }
+        query_count += 1
+
       # When the process outputs something, capture it and send it to the content hash
       when content_io = process_output_channel.receive
-        successfully_completed_chat_completion = successfully_completed_chat_completion_channel.receive
-        
-        # This should split based on the unique token
+        query_count += query_count_incrementer_channel.receive
         content["content"] = content_io.gets_to_end.split(@unique_token_at_the_end_of_the_prompt_to_split_on).last
       when timeout(max_time_processing)
-        puts "We timed out..."
         Log.info { "The AI took too long, restarting the query now" }
 
         if Process.exists?(process_id_channel.receive)
           Log.info { "The process is still running, let's wait for the output channel to receive something" }
 
-          sleep 1.minute
+          sleep max_time_processing
 
           Log.info { "checking the process output again..." }
           output = process_output_channel.receive
@@ -227,26 +230,20 @@ class Llamero::BaseModel
         end
 
         # If the pid for the process is still running, check the last output for this process and compare it to the last known output. If it's the same, kill the process and move on
-        if content["content"].empty?
+        if !content.has_key?("content") || content["content"].empty?
           content["content"] = %({ "error": "5 attempts were made to generate a chat completion and timed out every time. Try changing your prompt." })
         end
 
-        query_count += 1
+        query_count += 1 if content["content"].empty?
       end
-
-      successfully_completed_chat_completion = successfully_completed_chat_completion_channel.receive
     end
 
     process_id_channel.close
     process_output_channel.close
     query_count_incrementer_channel.close
-    successfully_completed_chat_completion_channel.close
 
     # This is where I should probably make this into a block that can process that output so parsing can be done via a block and return just the final result
 
     return IO::Memory.new(content["content"])
   end
-
-
-
 end
