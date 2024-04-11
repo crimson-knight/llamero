@@ -182,15 +182,18 @@ class Llamero::BaseModel
         begin
           output_io = IO::Memory.new
           error_io = IO::Memory.new
-          
+
+          Log.info { "Interacting with the model" }
           current_process = Process.new("llamacpp -m \"#{model_root_path.join(@model_name)}\" #{grammar_file_command} --n-predict #{@n_predict} --threads #{@threads} --ctx-size #{@context_size} --temp #{@temperature} --top-k #{@top_k_sampling} --repeat-penalty #{@repeat_pentalty} --log-disable --prompt \"#{final_prompt_text}\"", shell: true, input: Process::Redirect::Pipe, output: output_io, error: error_io)
           process_id_channel.send(current_process.pid)
           current_process.wait
           
           if error_io.rewind.gets_to_end.blank?
+            Log.info { "Recieved a successful response from the model" }
             query_count_incrementer_channel.send(5)
             process_output_channel.send(output_io.rewind)
           else
+            Log.info { "Stderror has output, so there was an error: #{error_io.rewind.gets_to_end}" }
             query_count_incrementer_channel.send(1)
             error_channel.send(error_io.rewind.gets_to_end)
           end
@@ -213,6 +216,7 @@ class Llamero::BaseModel
       when content_io = process_output_channel.receive
         query_count += query_count_incrementer_channel.receive
         content["content"] = content_io.gets_to_end.split(@unique_token_at_the_end_of_the_prompt_to_split_on).last
+        Log.info { "We have recieved the the output from the AI, and parsed into the response" }
       when timeout(max_time_processing)
         Log.info { "The AI took too long, restarting the query now" }
 

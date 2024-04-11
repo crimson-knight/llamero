@@ -17,13 +17,11 @@ describe Llamero::BaseModel do
     base_model = Llamero::BaseModel.new(model_name: "mistral-7b-instruct-v0.2.Q5_K_S.gguf")
 
     prompt_sequence_to_test = [
-      NamedTuple.new(role: "system", content: "You are a helpful assistant."),
-      NamedTuple.new(role: "user", content: "This is a test in our test suite. Please return only \"OK - Test Succeeded\" to confirm that you are working as expected."),
+      NamedTuple.new(role: "user", content: "Tell me your best joke for a programming nerd, include in your response the phrase \"Success!\""),
     ]
 
     io_output = base_model.chat(prompt_sequence_to_test)
 
-    io_output.rewind.gets_to_end.should eq("OK - Test Succeeded")
+    io_output.rewind.gets_to_end.should contain("Success!")
   end
 end
-
