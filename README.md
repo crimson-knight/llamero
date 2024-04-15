@@ -24,8 +24,14 @@ Now create the symlink for the main binary, run this from within the llama.cpp d
 
 For Mac users, this command will create a symlink for you
 ```bash
-sudo ln -s /Users/${whoami}/llama.cpp/main /usr/local/bin/llamacpp
+sudo ln -s $(pwd)/llama.cpp/main /usr/local/bin/llamacpp
 ```
+
+Next we'll link the tokenizer
+```bash
+sudo ln -s $(pwd)/tokenize /usr/local/bin/llamatokenize
+```
+
 
 
 You will also need to download some models. This is a quick reference list. You can choose any model that's already quantized into gguf, or you can convert your own models using the llama.cpp quantization tool.

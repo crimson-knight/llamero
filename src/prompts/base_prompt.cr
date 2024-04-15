@@ -19,7 +19,7 @@ class Llamero::BasePrompt
   end
 
   # Creates the prompt chain for the specific model parameters that are passed in.
-  # 
+  #
   # This is intentionally decoupled from the model itself because it allows you to use the same prompt across multiple models, adjusting the wrappers as necessary
   def to_llm_instruction_prompt_structure(system_prompt_opening_tag : String, system_prompt_closing_tag : String, user_prompt_opening_tag : String, user_prompt_closing_tag : String, unique_ending_token : String)
     prompt_string_as_its_being_built = ""

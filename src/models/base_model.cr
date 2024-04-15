@@ -1,4 +1,5 @@
 require "log"
+require "../tokenization/tokenizer"
 
 # The primary client for interacting directly with models that are available on the local computer.
 #
@@ -8,28 +9,31 @@ require "log"
 #   - managing the model's context window (token length)
 #
 # Logs are always disabled with --log-disable when running from within this app
-# 
+#
 # The `chat_template_*` properties are used to wrap the system and user prompts. This is used to generate the prompts for the LLM.
 # Chat models are the most commonly used types of models and they are the most likely to be used with this class.
 # You can get the symbols you need from the HF repo you got your model from, under the `prompt-template` section.
 class Llamero::BaseModel
+  # All tokenization behavior lies within this module
+  include Llamero::Tokenizer
+
   # This should be the full _filename_ of the model, including the .gguf file extension.
   #
   # Example: llama-2-13b-chat.Q6_K.gguf
   property model_name : String = ""
 
-  # The directory where any grammar files will be located 
-  # 
+  # The directory where any grammar files will be located
+  #
   # Defaults to `/Users/#{`whoami`.strip}/grammars`
   property grammar_root_path : Path = Path["/Users/#{`whoami`.strip}/grammars"]
 
   # The directory where any lora filters will be located. This is optional, but if you want to use lora filters, you will need to specify this. Lora filters are specific per model they were fine-tune from.
-  # 
+  #
   # Default: /Users/#{`whoami`.strip}/loras
   property lora_root_path : Path = Path["/Users/#{`whoami`.strip}/loras"]
 
   # The directory where the model files will be located. This is required.
-  # 
+  #
   # Default: /Users/#{`whoami`.strip}/models
   property model_root_path : Path = Path["/Users/#{`whoami`.strip}/models"]
 
@@ -73,7 +77,7 @@ class Llamero::BaseModel
   # Override any of the default values that are set in the child class
   def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, repeat_pentalty : Float32? = nil, top_k_sampling : Int32? = nil, threads : Int32? = nil, grammer_file : String? = nil, context_size : Int32? = nil, temperature : Float32? = nil, keep : String? = nil, n_predict : Int32? = nil, chat_template_system_prompt_opening_wrapper : String? = nil, chat_template_system_prompt_closing_wrapper : String? = nil, chat_template_user_prompt_opening_wrapper : String? = nil, chat_template_user_prompt_closing_wrapper : String? = nil)
     raise "Model name does not end in .gguf, the model name must include the file extension" unless model_name.ends_with?(".gguf")
-    
+
     @model_name = model_name if model_name
     @grammar_root_path = grammar_root_path if grammar_root_path
     @lora_root_path = lora_root_path if lora_root_path
@@ -97,7 +101,7 @@ class Llamero::BaseModel
   # This is the primary method for interacting with the LLM. It takes a prompt chain, sends the prompt to the LLM and uses concurrency to wait for the response or retry after a timeout threshold.
   #
   # This is the preferred method over passing in an array of `NamedTuple`s.
-  # 
+  #
   # Timeout: 30 seconds
   # Retry: 5 times
   def chat(prompt_chain : BasePrompt, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
@@ -144,7 +148,7 @@ class Llamero::BaseModel
     end
 
     # Change this into a prompting format that more clearly uses the User/Assistant format. Need to look it up in the docs though!
-    messages.each do |message| 
+    messages.each do |message|
       if message[:role] != "system"
         prompt_text += "#{@chat_template_user_prompt_opening_wrapper}\n"
         prompt_text += message[:content]
@@ -163,7 +167,6 @@ class Llamero::BaseModel
 
   # Todo: Add the response
   private def run_llama_cpp_bin(final_prompt_text : String, grammar_file_command : String, max_time_processing : Time::Span, max_retries : Int32)
-    
     response_json = Hash(String, Hash(String, String)).new
     content = Hash(String, String).new
 
@@ -187,7 +190,7 @@ class Llamero::BaseModel
           current_process = Process.new("llamacpp -m \"#{model_root_path.join(@model_name)}\" #{grammar_file_command} --n-predict #{@n_predict} --threads #{@threads} --ctx-size #{@context_size} --temp #{@temperature} --top-k #{@top_k_sampling} --repeat-penalty #{@repeat_pentalty} --log-disable --prompt \"#{final_prompt_text}\"", shell: true, input: Process::Redirect::Pipe, output: output_io, error: error_io)
           process_id_channel.send(current_process.pid)
           current_process.wait
-          
+
           if error_io.rewind.gets_to_end.blank?
             Log.info { "Recieved a successful response from the model" }
             query_count_incrementer_channel.send(5)
@@ -203,16 +206,16 @@ class Llamero::BaseModel
           content["content"] = "error was rescued while trying to query the llm"
         end
       end
- 
+
       Log.info { "The AI is now processing... please wait" }
-      
+
       # Multi-threaded keyword here, this acts like a blocking mechanism to allow for reflecting on the previously spawned fiber
       select
       when error_recieved = error_channel.receive
         Log.error { "An error occured while processing the LLM: #{error_recieved}" }
         query_count += 1
 
-      # When the process outputs something, capture it and send it to the content hash
+        # When the process outputs something, capture it and send it to the content hash
       when content_io = process_output_channel.receive
         query_count += query_count_incrementer_channel.receive
         content["content"] = content_io.gets_to_end.split(@unique_token_at_the_end_of_the_prompt_to_split_on).last
