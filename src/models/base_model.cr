@@ -55,8 +55,7 @@ class Llamero::BaseModel
   # Adjust up or down to play with creativity. Default: 0.9
   property temperature : Float32 = 0.9 # --temperature
 
-  # This is just a good idea, it helps keep the original prompt in the context window. This should keep the model more focused on the original topic. You will need to calculate the tokens to include here.
-  # :nodoc:
+  # This can be set by using the `Llamero::Tokenizer#tokenize` method from the `Llamero::Tokenizer` module.
   property keep : String = "" # --keep or --keep N where `N` is the number of tokens to refresh into the context window
 
   # Setting this changes how many tokens are trying to be predicted at a time. Setting this to -1 will generate tokens infinitely, but causes the context window to reset frequently.

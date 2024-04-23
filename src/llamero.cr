@@ -1,6 +1,7 @@
 require "./prompts/**"
 require "./models/**"
 require "./tokenization/**"
+require "./grammars/**"
 
 # TODO: Write documentation for `Llamero`
 module Llamero
