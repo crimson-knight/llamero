@@ -74,7 +74,7 @@ class Llamero::BaseModel
   # Note, this is probably going to need to be adapted to be more dynamic based on some kind of tokenization lib. Probably will need to bind to it with C functions/lib
 
   # Override any of the default values that are set in the child class
-  def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, repeat_pentalty : Float32? = nil, top_k_sampling : Int32? = nil, threads : Int32? = nil, grammer_file : String? = nil, context_size : Int32? = nil, temperature : Float32? = nil, keep : String? = nil, n_predict : Int32? = nil, chat_template_system_prompt_opening_wrapper : String? = nil, chat_template_system_prompt_closing_wrapper : String? = nil, chat_template_user_prompt_opening_wrapper : String? = nil, chat_template_user_prompt_closing_wrapper : String? = nil)
+  def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, repeat_pentalty : Float32? = nil, top_k_sampling : Int32? = nil, threads : Int32? = nil, grammer_file : String? = nil, context_size : Int32? = nil, temperature : Float32? = nil, keep : String? = nil, n_predict : Int32? = nil, chat_template_system_prompt_opening_wrapper : String? = nil, chat_template_system_prompt_closing_wrapper : String? = nil, chat_template_user_prompt_opening_wrapper : String? = nil, chat_template_user_prompt_closing_wrapper : String? = nil, unique_token_at_the_end_of_the_prompt_to_split_on : String? = nil)
     raise "Model name does not end in .gguf, the model name must include the file extension" unless model_name.ends_with?(".gguf")
 
     @model_name = model_name if model_name
@@ -95,6 +95,7 @@ class Llamero::BaseModel
     @chat_template_system_prompt_closing_wrapper = chat_template_system_prompt_closing_wrapper if chat_template_system_prompt_closing_wrapper
     @chat_template_user_prompt_opening_wrapper = chat_template_user_prompt_opening_wrapper if chat_template_user_prompt_opening_wrapper
     @chat_template_user_prompt_closing_wrapper = chat_template_user_prompt_closing_wrapper if chat_template_user_prompt_closing_wrapper
+    @unique_token_at_the_end_of_the_prompt_to_split_on = unique_token_at_the_end_of_the_prompt_to_split_on if unique_token_at_the_end_of_the_prompt_to_split_on
   end
 
   # This is the primary method for interacting with the LLM. It takes a prompt chain, sends the prompt to the LLM and uses concurrency to wait for the response or retry after a timeout threshold.
@@ -103,7 +104,7 @@ class Llamero::BaseModel
   #
   # Timeout: 30 seconds
   # Retry: 5 times
-  def chat(prompt_chain : BasePrompt, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
+  def chat(prompt_chain : BasePrompt, grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
     # Update the instance variables with any of the parameters that were passed in
     @temperature = temperature if temperature
     @context_size = max_tokens if max_tokens
@@ -112,7 +113,7 @@ class Llamero::BaseModel
     @n_predict = n_predict if n_predict
     @grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
 
-    grammar_file_command = @grammar_file.basename.blank? ? "" : "--grammar-file \"#{@grammar_root_path.join(@grammar_file)}\""
+    grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
 
     prompt_chain.to_llm_instruction_prompt_structure(
       system_prompt_opening_tag: @chat_template_system_prompt_opening_wrapper,
@@ -129,7 +130,7 @@ class Llamero::BaseModel
   #
   # Default Timeout: 30 seconds
   # Default Max Retries: 5
-  def chat(messages : Array(NamedTuple(role: String, content: String)), temperature : Float32? = nil, max_tokens : Int32? = nil, grammar_file : String | Path = Path.new, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5)
+  def chat(messages : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5)
     grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
 
     @temperature = temperature if temperature
@@ -138,7 +139,7 @@ class Llamero::BaseModel
     @top_k_sampling = top_k_sampling if top_k_sampling
     @n_predict = n_predict if n_predict
     @grammar_file = grammar_file if !grammar_file.basename.blank?
-    grammar_file_command = @grammar_file.basename.blank? ? "" : "--grammar-file \"#{@grammar_root_path.join(@grammar_file)}\""
+    grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
 
     prompt_text = ""
 
@@ -162,6 +163,19 @@ class Llamero::BaseModel
 
   def model_name=(model_name : String)
     @model_name = model_name.split(".").first
+  end
+
+  # Create the CLI grammar output or the grammar file command
+  private def create_grammar_cli_command(grammar_class : Llamero::BaseGrammar | Nil, grammar_file : Path = Path.new) : String
+    # If the grammar_class is present, create the IO for the grammar command
+    if grammar_class
+      return "--grammar \"#{grammar_class.to_grammar_file}\""
+    else
+      grammar_file_command = ""
+      grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
+      grammar_file_command = grammar_file.basename.blank? ? "" : "--grammar-file \"#{@grammar_root_path.join(@grammar_file)}\""
+      return grammar_file_command
+    end
   end
 
   # Todo: Add the response

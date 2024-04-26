@@ -9,7 +9,7 @@ class Llamero::BasePrompt
   # The composed prompt chain in a format that can be used by LLM's, specifically chat-based models or instruction models
   property composed_prompt_chain_for_instruction_models : String = ""
 
-  def initialize(system_prompt : String = "", messages : Array[PromptMessage] = [] of PromptMessage)
+  def initialize(system_prompt : String = "", messages : Array(PromptMessage) = [] of PromptMessage)
     @system_prompt = system_prompt
     @prompt_chain = messages
   end
@@ -25,10 +25,10 @@ class Llamero::BasePrompt
     prompt_string_as_its_being_built = ""
 
     # Add the system prompt if a system prompt is provided
-    prompt_string_as_its_being_built << "#{system_prompt_opening_tag}\n#{@system_prompt}\n#{system_prompt_closing_tag}\n\n" if !@system_prompt.empty?
+    prompt_string_as_its_being_built += "#{system_prompt_opening_tag}\n#{@system_prompt}\n#{system_prompt_closing_tag}\n\n" if !@system_prompt.empty?
 
     # Add the user prompt
-    prompt_string_as_its_being_built << "#{user_prompt_opening_tag}\n#{@prompt_chain.map { |message| message.to_llm_instruction_prompt_syntax }.join("\n")}\n#{user_prompt_closing_tag}"
+    prompt_string_as_its_being_built += "#{user_prompt_opening_tag}\n#{@prompt_chain.map { |message| message.to_llm_instruction_prompt_syntax }.join("\n")}\n#{user_prompt_closing_tag}"
 
     @composed_prompt_chain_for_instruction_models = prompt_string_as_its_being_built
   end

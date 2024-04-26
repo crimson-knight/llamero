@@ -7,7 +7,7 @@ module Llamero::Tokenizer
   abstract def model_name : String
 
   # Counts all of the tokens in the given text, returning an array of the parsed tokens
-  def tokenize(text_to_tokenize : IO | String, token_counter : Int32 = 0) : Array(String)
+  def tokenize(text_to_tokenize : IO | String) : Array(String)
     raise "Model name cannot be blank" if @model_name.blank?
 
     output_io = IO::Memory.new
@@ -27,7 +27,6 @@ module Llamero::Tokenizer
         # Get the entire token from beside the -> symbol, it starts with a single quote and ends with a single quote
         token = line.split("->").last.strip.gsub(/^'|'$/, "")
         array_of_tokenized_prompt << token
-        token_counter += 1
       end
     end
 
