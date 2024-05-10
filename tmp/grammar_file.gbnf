@@ -1,0 +1,4 @@
+root ::= TestGrammar
+TestGrammar ::= "{\"success_response_text\":"   String  ",\"success_response_random_number_over_100\":"   Int  "}"
+String ::= "\""  ([^"]*)  "\""
+Int ::= [0-9]+

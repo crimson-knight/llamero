@@ -21,3 +21,15 @@ class Llamero::BaseGrammar
   end
 
 end
+
+
+# Improvement notes that aren't intended to be documented outside of the code base:
+# 
+# 1. Improve this to add annotations that would allow setting the amount of tokens to predict for a specific attribute.
+#   This would let the developer adjust how large of a reply they would need in total which means more accurate generation.
+# 
+#   How this would work:
+#     - Create the annotation and have it take a value that represents the number of tokens the _value_ can be up to.
+#     - This number, plus a cushion could then be calculated and used to dynamically manage the n_predict attribute. Making performance more efficient and a feature.
+# 
+

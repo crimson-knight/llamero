@@ -1,5 +1,6 @@
 require "log"
 require "../tokenization/tokenizer"
+require "../grammars/base_grammar"
 
 # The primary client for interacting directly with models that are available on the local computer.
 #
@@ -60,8 +61,8 @@ class Llamero::BaseModel
 
   # Setting this changes how many tokens are trying to be predicted at a time. Setting this to -1 will generate tokens infinitely, but causes the context window to reset frequently.
   # Setting this to -2 stops generating as soon as the context window fills up
-  # Default: 1024
-  property n_predict : Int32 = 1024
+  # Default: 512
+  property n_predict : Int32 = 512
 
   # The `chat_template_*` properties are used to wrap the system and user prompts. This is used to generate the prompts for the LLM.
   property chat_template_system_prompt_opening_wrapper : String = ""
@@ -69,9 +70,13 @@ class Llamero::BaseModel
   property chat_template_user_prompt_opening_wrapper : String = ""
   property chat_template_user_prompt_closing_wrapper : String = ""
 
+  # This is a unique token at the end of the prompt that is used to split off and parse the response from the LLM.
   property unique_token_at_the_end_of_the_prompt_to_split_on : String = "\n\r\rAssistant:\n"
 
-  # Note, this is probably going to need to be adapted to be more dynamic based on some kind of tokenization lib. Probably will need to bind to it with C functions/lib
+  # Sometimes we'll need to use a temporary file to pass the grammar to the LLM. This is the path to that file.
+  # We'll clear it after we're done with it, but this isn't meant to be used outside of this class.
+  # :nodoc:
+  property tmp_grammar_file_path : Path = Path[""]
 
   # Override any of the default values that are set in the child class
   def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, repeat_pentalty : Float32? = nil, top_k_sampling : Int32? = nil, threads : Int32? = nil, grammer_file : String? = nil, context_size : Int32? = nil, temperature : Float32? = nil, keep : String? = nil, n_predict : Int32? = nil, chat_template_system_prompt_opening_wrapper : String? = nil, chat_template_system_prompt_closing_wrapper : String? = nil, chat_template_user_prompt_opening_wrapper : String? = nil, chat_template_user_prompt_closing_wrapper : String? = nil, unique_token_at_the_end_of_the_prompt_to_split_on : String? = nil)
@@ -104,7 +109,7 @@ class Llamero::BaseModel
   #
   # Timeout: 30 seconds
   # Retry: 5 times
-  def chat(prompt_chain : BasePrompt, grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
+  def chat(prompt_chain : Llamero::BasePrompt, grammar_class : Llamero::BaseGrammar, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
     # Update the instance variables with any of the parameters that were passed in
     @temperature = temperature if temperature
     @context_size = max_tokens if max_tokens
@@ -114,7 +119,7 @@ class Llamero::BaseModel
     @grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
 
     grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
-
+    
     prompt_chain.to_llm_instruction_prompt_structure(
       system_prompt_opening_tag: @chat_template_system_prompt_opening_wrapper,
       system_prompt_closing_tag: @chat_template_system_prompt_closing_wrapper,
@@ -123,14 +128,14 @@ class Llamero::BaseModel
       unique_ending_token: @unique_token_at_the_end_of_the_prompt_to_split_on
     )
 
-    run_llama_cpp_bin(prompt_chain.composed_prompt_chain_for_instruction_models, grammar_file_command, max_time_processing: timeout, max_retries: max_retries)
+    run_llama_cpp_bin(prompt_chain.composed_prompt_chain_for_instruction_models, grammar_file_command, max_time_processing: timeout, max_retries: max_retries, grammar_response: grammar_class)
   end
 
   # This is the main method for interacting with the LLM. It takes in an array of messages, and returns the response from the LLM.
   #
   # Default Timeout: 30 seconds
   # Default Max Retries: 5
-  def chat(messages : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5)
+  def quick_chat(prompt_chain : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5)
     grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
 
     @temperature = temperature if temperature
@@ -141,24 +146,30 @@ class Llamero::BaseModel
     @grammar_file = grammar_file if !grammar_file.basename.blank?
     grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
 
-    prompt_text = ""
+    if grammar_class
+      grammar_file_command = grammar_file_command.prepend("#{@grammar_root_path.join(@grammar_file)}")
+    end
 
-    if messages.first[:role] == "system"
-      prompt_text = "#{@chat_template_system_prompt_opening_wrapper}\n#{messages.first[:content]}\n#{@chat_template_system_prompt_closing_wrapper}\n"
+    # Convert the messages to a format that the LLM expects
+    new_prompt_messages = [] of Llamero::PromptMessage
+
+    if prompt_chain.first[:role] == "system"
+      new_prompt_messages << Llamero::PromptMessage.new(role: "system", content: messages.first[:content])
     end
 
     # Change this into a prompting format that more clearly uses the User/Assistant format. Need to look it up in the docs though!
-    messages.each do |message|
-      if message[:role] != "system"
-        prompt_text += "#{@chat_template_user_prompt_opening_wrapper}\n"
-        prompt_text += message[:content]
-        prompt_text += "#{@chat_template_user_prompt_closing_wrapper}\n"
-      end
+    prompt_chain.each do |message|
+      new_prompt_messages << Llamero::PromptMessage.new(role: "user", content: message[:content]) if message[:role] != "system"
     end
 
-    prompt_text += @unique_token_at_the_end_of_the_prompt_to_split_on
+    new_base_prompt = BasePrompt.new(messages: new_prompt_messages)
 
-    run_llama_cpp_bin(prompt_text, grammar_file_command, max_time_processing: timeout, max_retries: max_retries)
+    if grammar_class
+      chat(new_base_prompt, grammar_class, grammar_file, temperature, max_tokens, repeat_penalty, top_k_sampling, n_predict, timeout, max_retries)
+    else
+      new_base_grammar = Llamero::BaseGrammar.new
+      chat(new_base_prompt, new_base_grammar, grammar_file, temperature, max_tokens, repeat_penalty, top_k_sampling, n_predict, timeout, max_retries)
+    end
   end
 
   def model_name=(model_name : String)
@@ -169,17 +180,21 @@ class Llamero::BaseModel
   private def create_grammar_cli_command(grammar_class : Llamero::BaseGrammar | Nil, grammar_file : Path = Path.new) : String
     # If the grammar_class is present, create the IO for the grammar command
     if grammar_class
-      return "--grammar \"#{grammar_class.to_grammar_file}\""
+      # Write the grammar class IO to a temporary file, and pass the path to that file to the LLM
+      @tmp_grammar_file_path = Path["tmp", "grammar_file.gbnf"]
+      Dir.mkdir("tmp") unless Dir.exists?("tmp")
+      File.write(@tmp_grammar_file_path, grammar_class.to_grammar_file.rewind.gets_to_end)
+      return "#{@tmp_grammar_file_path}"
     else
       grammar_file_command = ""
       grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
-      grammar_file_command = grammar_file.basename.blank? ? "" : "--grammar-file \"#{@grammar_root_path.join(@grammar_file)}\""
+      grammar_file_command = grammar_file.basename.blank? ? "" : "#{@grammar_root_path.join(@grammar_file)}"
       return grammar_file_command
     end
   end
 
-  # Todo: Add the response
-  private def run_llama_cpp_bin(final_prompt_text : String, grammar_file_command : String, max_time_processing : Time::Span, max_retries : Int32)
+  # Peforms the actual interaction with LLM, including re-trying from failed parsing attempts and timeouts
+  private def run_llama_cpp_bin(final_prompt_text : String, grammar_file_command : String, max_time_processing : Time::Span, max_retries : Int32, grammar_response : Llamero::BaseGrammar? = nil)
     response_json = Hash(String, Hash(String, String)).new
     content = Hash(String, String).new
 
@@ -193,14 +208,45 @@ class Llamero::BaseModel
     error_channel = Channel(String).new(capacity: 1)
     query_count_incrementer_channel = Channel(Int32).new(capacity: 1)
 
-    while query_count < 5
+    # The main loop to run the llama cpp bin & parse a successful response
+    while query_count < max_retries
       spawn do
         begin
           output_io = IO::Memory.new
           error_io = IO::Memory.new
+          stdin_io = IO::Memory.new
 
           Log.info { "Interacting with the model" }
-          current_process = Process.new("llamacpp -m \"#{model_root_path.join(@model_name)}\" #{grammar_file_command} --n-predict #{@n_predict} --threads #{@threads} --ctx-size #{@context_size} --temp #{@temperature} --top-k #{@top_k_sampling} --repeat-penalty #{@repeat_pentalty} --log-disable --prompt \"#{final_prompt_text}\"", shell: true, input: Process::Redirect::Pipe, output: output_io, error: error_io)
+
+          path_to_llamacpp = `which llamacpp`.chomp
+
+          puts "the grammar command: #{grammar_file_command}"
+
+          process_args = [
+            "-m", 
+            "#{model_root_path.join(@model_name)}",
+            "--n-predict", 
+            @n_predict.to_s, 
+            "--threads", 
+            @threads.to_s, 
+            "--ctx-size", 
+            @context_size.to_s, 
+            "--temp", 
+            @temperature.to_s, 
+            "--top-k", 
+            @top_k_sampling.to_s, 
+            "--repeat-penalty", 
+            @repeat_pentalty.to_s, 
+            "--log-disable", 
+            "--prompt", 
+            final_prompt_text].select { |r| !r.empty? }
+
+          if !grammar_file_command.blank?
+            process_args.insert(2, grammar_file_command)
+            process_args.insert(2, "--grammar-file")
+          end
+
+          current_process = Process.new(path_to_llamacpp, process_args, output: output_io, error: error_io, input: stdin_io)
           process_id_channel.send(current_process.pid)
           current_process.wait
 
@@ -233,6 +279,16 @@ class Llamero::BaseModel
         query_count += query_count_incrementer_channel.receive
         content["content"] = content_io.gets_to_end.split(@unique_token_at_the_end_of_the_prompt_to_split_on).last
         Log.info { "We have recieved the the output from the AI, and parsed into the response" }
+
+        begin
+          grammar_response.class.from_json(content["content"])
+        rescue
+          grammar_response = DefaultStringResponse.from_json(content["content"])
+        end
+
+        if grammar_response
+          grammar_response.class.from_json(content["content"])
+        end
       when timeout(max_time_processing)
         Log.info { "The AI took too long, restarting the query now" }
 
@@ -251,7 +307,7 @@ class Llamero::BaseModel
 
         # If the pid for the process is still running, check the last output for this process and compare it to the last known output. If it's the same, kill the process and move on
         if !content.has_key?("content") || content["content"].empty?
-          content["content"] = %({ "error": "5 attempts were made to generate a chat completion and timed out every time. Try changing your prompt." })
+          content["content"] = %({ "error": "5 attempts were made to generate a chat completion and timed out or errored every time. Try changing your prompt." })
         end
 
         query_count += 1 if content["content"].empty?
@@ -262,8 +318,16 @@ class Llamero::BaseModel
     process_output_channel.close
     query_count_incrementer_channel.close
 
-    # This is where I should probably make this into a block that can process that output so parsing can be done via a block and return just the final result
-
-    return IO::Memory.new(content["content"])
+    # If the grammar response is a Llamero::BaseGrammar, parse the response into the grammar_response object
+    if grammar_response.is_a?(Llamero::BaseGrammar)
+      grammar_response.class.from_json(content["content"])
+    else
+      DefaultStringResponse.from_json(content["content"])
+    end
   end
+end
+
+# This is a helper class for when a user does not provide a grammar, it'll default to responding with a single string property
+class DefaultStringResponse < Llamero::BaseGrammar
+  property ai_assistant_response : String
 end

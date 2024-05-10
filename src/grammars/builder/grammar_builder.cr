@@ -113,6 +113,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
       case primitive_name
       when /^(String|Int|Float|Bool|Time)/
         row_content = match_row_type_to_primitive(primitive_name)
+        primitive_name = primitive_name.gsub(/\d.*/, "")
       when /^Array/
         this_arrays_primitive_type = primitive_name.split("(").last[/^(String|Int|Float|Bool|Time)/]
         this_arrays_primitive_content = match_row_type_to_primitive(this_arrays_primitive_type)
@@ -123,12 +124,22 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
       end
 
       if primitive_name.ends_with?("?")
-        row_content += " | null"
+        row_content += " | \"null\""
         primitive_name = primitive_name.split("?").first
       end
 
       unless row_content.blank?
         @rows << Row.new(row_name: primitive_name, row_content: row_content)
+      end
+    end
+
+    @list_of_non_primitive_instance_vars_and_types.each do |non_primitive_instance_var|
+      this_is_an_array = non_primitive_instance_var["property_type"].starts_with?("Array(")
+
+      if this_is_an_array
+        row_property_name = non_primitive_instance_var["property_type"].split("(").last.split(")").first
+        row_content = %("[]" | "["   #{row_property_name}   (","   #{row_property_name}  )*?  "]")
+        @rows << Row.new(row_name: row_property_name + "Array", row_content: row_content)
       end
     end
 
@@ -146,11 +157,11 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
     when "String"
       row_content = %("\\\""  ([^"]*)  "\\\"")
     when .matches?(/^Int/)
-      row_content = %("   -?[0-9]+   ")
+      row_content = %([0-9]+)
     when .matches?(/^Float/)
-      row_content = %("-?[0-9]+\.[0-9]+")
+      row_content = %([0-9]+  "\."  [0-9]+)
     when "Bool"
-      row_content = %(true | false)
+      row_content = %("true" | "false")
     when "Time" # Creates an ISO8601 timestamp
       row_content = %("\"   [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z   \"")
     else
@@ -170,25 +181,42 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
 
     is_first_property = true
     @list_of_non_primitive_instance_vars_and_types.each do |ivar|
+      property_is_an_array = ivar["property_type"].starts_with?("Array(")
+
+      if property_is_an_array
+        row_property_type = ivar["property_type"].split("(").last.split(")").first + "Array"
+      else
+        row_property_type = ivar["property_type"]
+      end
+
+
       if is_first_property
-        main_object_grammar_row += "\"#{ivar["property_name"]}\":   #{ivar["property_type"]}  "
+        main_object_grammar_row += "\\\"#{ivar["property_name"]}\\\":\"  #{row_property_type}   \"" # Extra spaces at the end are _necessary_
         is_first_property = false
       else
-        main_object_grammar_row += ", \"#{ivar["property_name"]}\":   #{ivar["property_type"]}  "
+        main_object_grammar_row += ",\\\"#{ivar["property_name"]}\\\":\"  #{row_property_type}  \""
       end
     end
     
     @list_of_primitive_instance_vars_and_types.each do |ivar|
+      type_is_an_array = ivar["property_type"].starts_with?("Array(")
+      if type_is_an_array
+        row_property_type = ivar["property_type"].split("(").last.split(")").first.gsub(/\d.*/, "") + "Array"
+      else
+        row_property_type = ivar["property_type"].gsub(/\d.*/, "")
+      end
+
+
       if is_first_property
-        main_object_grammar_row += "\"#{ivar["property_name"]}\":   #{ivar["property_type"]}  "
+        main_object_grammar_row += "\\\"#{ivar["property_name"]}\\\":\"   #{row_property_type}  \""
         is_first_property = false
       else
-        main_object_grammar_row += ", \"#{ivar["property_name"]}\":   #{ivar["property_type"]}  "
+        main_object_grammar_row += ",\\\"#{ivar["property_name"]}\\\":\"   #{row_property_type}  \""
       end
     end
     
     # Set the 2nd row to be the main object grammar for the "root"
-    @grammar_output << @grammar_class.class.to_s + " ::= " + main_object_grammar_row + "}\n"
+    @grammar_output << @grammar_class.class.to_s + " ::= \"" + main_object_grammar_row + "}\"\n"
 
     @grammar_output << @rows.map { |r| r.to_s }.join("\n")
   end

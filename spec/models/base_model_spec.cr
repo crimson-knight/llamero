@@ -1,5 +1,11 @@
 require "../spec_helper"
 
+class TestGrammar < Llamero::BaseGrammar
+  property success_response_text : String = ""
+  property success_response_random_number_over_100 : Int32 = 0
+end
+
+
 describe Llamero::BaseModel do
   it "can be instantiated" do
     base_model = Llamero::BaseModel.new(model_name: "not_really_a_model.gguf")
@@ -13,33 +19,29 @@ describe Llamero::BaseModel do
   end
 
   it "properly takes a Llamero::BasePrompt" do
+    expected_response = TestGrammar.from_json(%({}))
+
     base_prompt = Llamero::BasePrompt.new(
       system_prompt: "Follow the directions as accurately as you can.",
       messages: [
-        Llamero::PromptMessage.new(role: "user", content: "Reply with the the phrase \"Success!\""),
+        Llamero::PromptMessage.new(role: "user", content: "This is just a test, please reply with the phrase \"Test was a Success!\" in your success message and with a random number"),
       ]
     )
 
-    base_model = Llamero::BaseModel.new(model_name: "dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf")
+    base_model = Llamero::BaseModel.new(model_name: "mistral-7b-instruct-v0.2.Q5_K_S.gguf", n_predict: 20)
 
-    chat_io_output = base_model.chat(base_prompt)
+    actual_response = base_model.chat(base_prompt, expected_response)
 
-    puts chat_io_output.rewind.gets_to_end
+    actual_response.success_response_text.should contain("Success!")
+    actual_response.success_response_random_number_over_100.should be > 100
   end
 
   it "properly takes a prompt sequence of NamedTuples" do
-    base_model = Llamero::BaseModel.new(
-      model_name: "dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf", 
-      chat_template_system_prompt_opening_wrapper: "<|begin_of_text|><|start_header_id|>system<|end_header_id|>", 
-      chat_template_system_prompt_closing_wrapper: "<|eot_id|>", 
-      chat_template_user_prompt_opening_wrapper: "<|start_header_id|>user<|end_header_id|>",
-      chat_template_user_prompt_closing_wrapper: "<|eot_id|><|start_header_id|>",
-      unique_token_at_the_end_of_the_prompt_to_split_on: "assistant<|end_header_id|>"
-    )
+    base_model = Llamero::BaseModel.new(model_name: "mistral-7b-instruct-v0.2.Q5_K_S.gguf", n_predict: 20)
 
     prompt_sequence_to_test = [
       NamedTuple.new(role: "system", content: "Follow the directions as accurately as you can."),
-      NamedTuple.new(role: "user", content: "Reply with the the phrase \"Success!\""),
+      NamedTuple.new(role: "user", content: "This is just a test, please reply with the phrase \"Test was a Success!\" in your success message and with a random number"),
     ]
 
     io_output = base_model.chat(prompt_sequence_to_test)
@@ -47,8 +49,32 @@ describe Llamero::BaseModel do
     io_output.rewind.gets_to_end.should contain("Success!")
   end
 
+  it "properly uses a grammar and is able to parse a response" do
+    base_model = Llamero::BaseModel.new(model_name: "mistral-7b-instruct-v0.2.Q5_K_S.gguf", n_predict: 20)
+
+    base_prompt = Llamero::BasePrompt.new(
+      system_prompt: "Follow the directions as accurately as you can.",
+      messages: [
+        Llamero::PromptMessage.new(role: "user", content: "This is just a test, please reply with the phrase \"Test was a Success!\" in your success message and with a random number"),
+      ]
+    )
+
+    base_grammar = TestGrammar.from_json(%({}))
+
+    chat_io_output = base_model.chat(base_prompt, base_grammar)
+
+    puts "Here is the response we got from the model: "
+    puts chat_io_output.rewind.gets_to_end
+    puts "\n\n"
+
+    parsed_response = TestGrammar.from_json(chat_io_output.rewind.gets_to_end)
+    puts parsed_response.inspect
+    parsed_response.success_response_text.should contain("Success!")
+    parsed_response.success_response_random_number_over_100.should be > 100
+  end
+
   it "tokenizes a prompt string" do
-    base_model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf")
+    base_model = Llamero::BaseModel.new(model_name: "mistral-7b-instruct-v0.2.Q5_K_S.gguf")
 
     prompt_string_to_test = "This is a test, tell me a nerdy coding joke"
 
