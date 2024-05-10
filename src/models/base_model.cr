@@ -39,7 +39,7 @@ class Llamero::BaseModel
   property model_root_path : Path = Path["/Users/#{`whoami`.strip}/models"]
 
   # Adjust up to punish repetitions more harshly, lower for more monotonous responses. Default: 1.1
-  property repeat_pentalty : Float32 = 1.1 # --repeat-penalty
+  property repeat_penalty : Float32 = 1.1 # --repeat-penalty
 
   # Adjust up to get more unique responses, adjust down to get more "probable" responses. Default: 40
   property top_k_sampling : Int32 = 40 # --top-k
@@ -147,14 +147,14 @@ class Llamero::BaseModel
     grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
 
     if grammar_class
-      grammar_file_command = grammar_file_command.prepend("#{@grammar_root_path.join(@grammar_file)}")
+      grammar_file_command = "#{@grammar_root_path.join(@grammar_file)}" + grammar_file_command
     end
 
     # Convert the messages to a format that the LLM expects
     new_prompt_messages = [] of Llamero::PromptMessage
 
     if prompt_chain.first[:role] == "system"
-      new_prompt_messages << Llamero::PromptMessage.new(role: "system", content: messages.first[:content])
+      new_prompt_messages << Llamero::PromptMessage.new(role: "system", content: prompt_chain.first[:content])
     end
 
     # Change this into a prompting format that more clearly uses the User/Assistant format. Need to look it up in the docs though!
@@ -165,10 +165,10 @@ class Llamero::BaseModel
     new_base_prompt = BasePrompt.new(messages: new_prompt_messages)
 
     if grammar_class
-      chat(new_base_prompt, grammar_class, grammar_file, temperature, max_tokens, repeat_penalty, top_k_sampling, n_predict, timeout, max_retries)
+      chat(new_base_prompt, grammar_class, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
     else
-      new_base_grammar = Llamero::BaseGrammar.new
-      chat(new_base_prompt, new_base_grammar, grammar_file, temperature, max_tokens, repeat_penalty, top_k_sampling, n_predict, timeout, max_retries)
+      new_base_grammar = DefaultStringResponse.from_json(%({}))
+      chat(new_base_prompt, new_base_grammar, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
     end
   end
 
@@ -219,8 +219,6 @@ class Llamero::BaseModel
           Log.info { "Interacting with the model" }
 
           path_to_llamacpp = `which llamacpp`.chomp
-
-          puts "the grammar command: #{grammar_file_command}"
 
           process_args = [
             "-m", 
