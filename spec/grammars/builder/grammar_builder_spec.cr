@@ -1,6 +1,5 @@
 require "../../spec_helper"
 
-
 # Expected grammar output for this test class:
 # ```gbnf
 # root ::= TestGrammar
@@ -48,8 +47,8 @@ describe Llamero::Grammar::Builder::GrammarBuilder do
     placeholder_grammar = TestGrammar.from_json(%({}))
 
     io = placeholder_grammar.to_grammar_file
-    puts "We have built our grammar: "
-    puts io.rewind.gets_to_end
-
+    # puts io.rewind.gets_to_end
+    # # Do something to test the actual grammar file output here.
+    # This will need to wait until I have a fully working chart of what to expect
   end
 end

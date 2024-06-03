@@ -1,13 +1,12 @@
 # The primary builder for creating a grammar file or CLI output.
-# 
+#
 # This is not meant to be used directly, but rather through the `Grammar` class.
 class Llamero::Grammar::Builder::GrammarBuilder(T)
-
   property grammar_class : T
 
   # A non-unique list of all non-primitive field types that are also objects from BaseGrammar
   property list_of_non_primitive_instance_vars_and_types : Array(Hash(String, String)) = [] of Hash(String, String)
-  
+
   # A non-unqiue list of all primitive field types that need to be in the grammar output
   property list_of_primitive_instance_vars_and_types : Array(Hash(String, String)) = [] of Hash(String, String)
 
@@ -36,15 +35,15 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
     if @grammar_output.empty?
       # Step 1
       create_list_of_non_primitive_objects_and_primitives
-    
+
       # Step 2
       create_grammar_rows
-      
+
       # Step 3
       deduplicate_any_rows_and_produce_final_output(is_root_object)
     end
 
-    @grammar_output 
+    @grammar_output
   end
 
   # Creates the grammar output at compile-time based on the expected child class
@@ -54,7 +53,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
         types = T.instance_vars.select do |ivar_meta|
           {String, Number::Primitive, Float::Primitive, Bool}.any? { |t| t >= ivar_meta.type.resolve }
         end.map do |ivar_meta|
-          { "property_name" => ivar_meta.name.stringify, "property_type" => ivar_meta.type.stringify }
+          {"property_name" => ivar_meta.name.stringify, "property_type" => ivar_meta.type.stringify}
         end
       %}
 
@@ -62,7 +61,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
     {% end %}
 
     @list_of_non_primitive_instance_vars_and_types = Array(Hash(String, String)).new
-    
+
     {% begin %}
       {%
         types = T.instance_vars.select do |ivar_meta|
@@ -73,7 +72,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
       {% for object_type in types %}
         @list_of_non_primitive_instance_vars_and_types << { 
           "property_name" => {{ object_type.name.stringify }},
-          "property_type" => {{ object_type.type.type_vars.any? { |t_var| t_var == Nil } ?  object_type.type.stringify + "?" : object_type.type.stringify }}
+          "property_type" => {{ object_type.type.type_vars.any? { |t_var| t_var == Nil } ? object_type.type.stringify + "?" : object_type.type.stringify }}
         }
       
         @child_grammar_output << "\n" << {{ object_type.type.resolve }}.get_grammar_output_for_object
@@ -148,29 +147,27 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
       split_row = row.split(" ::= ")
       @rows << Row.new(row_name: split_row.first.strip, row_content: split_row.last.strip)
     end
-
   end
 
   # A helper method for matching primitive grammar rows
   private def match_row_type_to_primitive(row_type : String) : String
     case row_type
     when "String"
-      row_content = %("\\\""  ([^"]*)  "\\\"")
+      row_content = %("\\""  ([^"]*)  "\\"")
     when .matches?(/^Int/)
       row_content = %([0-9]+)
     when .matches?(/^Float/)
-      row_content = %([0-9]+  "\."  [0-9]+)
+      row_content = %([0-9]+  "."  [0-9]+)
     when "Bool"
       row_content = %("true" | "false")
     when "Time" # Creates an ISO8601 timestamp
-      row_content = %("\"   [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z   \"")
+      row_content = %(""   [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}Z   "")
     else
       row_content = ""
     end
 
     row_content
   end
-
 
   private def deduplicate_any_rows_and_produce_final_output(is_root_object : Bool = false) : IO
     @grammar_output << "root ::= " + @grammar_class.class.to_s + "\n" if is_root_object
@@ -189,7 +186,6 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
         row_property_type = ivar["property_type"]
       end
 
-
       if is_first_property
         main_object_grammar_row += "\\\"#{ivar["property_name"]}\\\":\"  #{row_property_type}   \"" # Extra spaces at the end are _necessary_
         is_first_property = false
@@ -197,7 +193,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
         main_object_grammar_row += ",\\\"#{ivar["property_name"]}\\\":\"  #{row_property_type}  \""
       end
     end
-    
+
     @list_of_primitive_instance_vars_and_types.each do |ivar|
       type_is_an_array = ivar["property_type"].starts_with?("Array(")
       if type_is_an_array
@@ -206,7 +202,6 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
         row_property_type = ivar["property_type"].gsub(/\d.*/, "")
       end
 
-
       if is_first_property
         main_object_grammar_row += "\\\"#{ivar["property_name"]}\\\":\"   #{row_property_type}  \""
         is_first_property = false
@@ -214,7 +209,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
         main_object_grammar_row += ",\\\"#{ivar["property_name"]}\\\":\"   #{row_property_type}  \""
       end
     end
-    
+
     # Set the 2nd row to be the main object grammar for the "root"
     @grammar_output << @grammar_class.class.to_s + " ::= \"" + main_object_grammar_row + "}\"\n"
 

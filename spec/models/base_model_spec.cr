@@ -5,7 +5,6 @@ class TestGrammar < Llamero::BaseGrammar
   property success_response_random_number_over_100 : Int32 = 0
 end
 
-
 describe Llamero::BaseModel do
   it "can be instantiated" do
     base_model = Llamero::BaseModel.new(model_name: "not_really_a_model.gguf")
@@ -28,16 +27,16 @@ describe Llamero::BaseModel do
       ]
     )
 
-    base_model = Llamero::BaseModel.new(model_name: "Meta-Llama-3-8B-Instruct.Q6_K.gguf", n_predict: 20)
+    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf", n_predict: 75)
 
     actual_response = base_model.chat(base_prompt, expected_response)
 
-    actual_response.success_response_text.should contain("Success!") if actual_response.responds_to?(:success_response)
-    actual_response.success_response_random_number_over_100.should be > 100 if actual_response.responds_to?(:success_response_random_number_over_100)
+    actual_response.success_response_text.should contain("Success!")
+    actual_response.success_response_random_number_over_100.should be > 100
   end
 
   it "properly takes a prompt sequence of NamedTuples" do
-    base_model = Llamero::BaseModel.new(model_name: "Meta-Llama-3-8B-Instruct.Q6_K.gguf", n_predict: 20)
+    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf", n_predict: 75)
 
     prompt_sequence_to_test = [
       NamedTuple.new(role: "system", content: "Follow the directions as accurately as you can."),
@@ -50,7 +49,7 @@ describe Llamero::BaseModel do
   end
 
   it "properly uses a grammar and is able to parse a response" do
-    base_model = Llamero::BaseModel.new(model_name: "Meta-Llama-3-8B-Instruct.Q6_K.gguf", n_predict: 20)
+    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf", n_predict: 75)
 
     base_prompt = Llamero::BasePrompt.new(
       system_prompt: "Follow the directions as accurately as you can.",
@@ -61,25 +60,20 @@ describe Llamero::BaseModel do
 
     base_grammar = TestGrammar.from_json(%({}))
 
-    chat_io_output = base_model.chat(base_prompt, base_grammar)
+    ai_response = base_model.chat(base_prompt, base_grammar)
 
-    puts "Here is the response we got from the model: "
-    puts chat_io_output.ai_assistant_response if chat_io_output.responds_to?(:ai_assistant_response)
-    puts "\n\n"
-
-    parsed_response = TestGrammar.from_json(chat_io_output.to_json)
-    parsed_response.success_response_text.should contain("Success!")
-    parsed_response.success_response_random_number_over_100.should be > 100
+    ai_response.success_response_text.should contain("Success!")
+    ai_response.success_response_random_number_over_100.should be > 100
   end
 
   it "tokenizes a prompt string" do
-    base_model = Llamero::BaseModel.new(model_name: "Meta-Llama-3-8B-Instruct.Q6_K.gguf")
+    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf")
 
     prompt_string_to_test = "This is a test, tell me a nerdy coding joke"
 
     tokenized_prompt = base_model.tokenize(prompt_string_to_test)
 
     tokenized_prompt.should be_a(Array(String))
-    tokenized_prompt.size.should eq(12)
+    tokenized_prompt.size.should eq(12) # This can change depending on the model and if the various meta token types are output or not when doing the tokenization
   end
 end

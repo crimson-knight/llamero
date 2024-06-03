@@ -30,6 +30,8 @@ class Llamero::BasePrompt
     # Add the user prompt
     prompt_string_as_its_being_built += "#{user_prompt_opening_tag}\n#{@prompt_chain.map { |message| message.to_llm_instruction_prompt_syntax }.join("\n")}\n#{user_prompt_closing_tag}"
 
-    @composed_prompt_chain_for_instruction_models = prompt_string_as_its_being_built
+    # Add the unique token to split on and set the final string
+
+    @composed_prompt_chain_for_instruction_models = prompt_string_as_its_being_built + unique_ending_token
   end
 end

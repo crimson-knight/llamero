@@ -1,5 +1,5 @@
 # Represents a single row in a grammar file.
-# 
+#
 # Not intended to be used directly.
 class Llamero::Grammar::Builder::Row
   property row_name : String
