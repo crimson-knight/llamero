@@ -153,7 +153,7 @@ class Llamero::Grammar::Builder::GrammarBuilder(T)
   private def match_row_type_to_primitive(row_type : String) : String
     case row_type
     when "String"
-      row_content = %("\\""  ([^"]*)  "\\"")
+      row_content = %("\\""  ([a-zA-Z0-9!@#$%^&*()_+= ]*)  "\\"")
     when .matches?(/^Int/)
       row_content = %([0-9]+)
     when .matches?(/^Float/)
