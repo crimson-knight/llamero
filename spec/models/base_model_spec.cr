@@ -27,7 +27,7 @@ describe Llamero::BaseModel do
       ]
     )
 
-    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf", n_predict: 75)
+    base_model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf", n_predict: 175, chat_template_end_of_generation_token: "<|eot_id|>")
 
     actual_response = base_model.chat(base_prompt, expected_response)
 
@@ -36,7 +36,7 @@ describe Llamero::BaseModel do
   end
 
   it "properly takes a prompt sequence of NamedTuples" do
-    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf", n_predict: 75)
+    base_model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf", n_predict: 175, chat_template_end_of_generation_token: "<|eot_id|>")
 
     prompt_sequence_to_test = [
       NamedTuple.new(role: "system", content: "Follow the directions as accurately as you can."),
@@ -49,12 +49,12 @@ describe Llamero::BaseModel do
   end
 
   it "properly uses a grammar and is able to parse a response" do
-    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf", n_predict: 75)
+    base_model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf", n_predict: 175, chat_template_end_of_generation_token: "<|eot_id|>")
 
     base_prompt = Llamero::BasePrompt.new(
       system_prompt: "Follow the directions as accurately as you can.",
       messages: [
-        Llamero::PromptMessage.new(role: "user", content: "This is just a test, please reply with the phrase \"Test was a Success!\" in your success message and with a random number"),
+        Llamero::PromptMessage.new(role: "user", content: "This is just a test, please reply with the phrase \"Test was a Success!\" in your success message, and with a random number between 1 and 100"),
       ]
     )
 
@@ -67,7 +67,7 @@ describe Llamero::BaseModel do
   end
 
   it "tokenizes a prompt string" do
-    base_model = Llamero::BaseModel.new(model_name: "llama-2-13b-chat.Q6_K.gguf")
+    base_model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf")
 
     prompt_string_to_test = "This is a test, tell me a nerdy coding joke"
 

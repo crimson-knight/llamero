@@ -1,6 +1,7 @@
 require "log"
 require "../tokenization/tokenizer"
 require "../grammars/base_grammar"
+require "./meta_data/meta_data_reader"
 
 # The primary client for interacting directly with models that are available on the local computer.
 #
@@ -20,7 +21,7 @@ class Llamero::BaseModel
 
   # This should be the full _filename_ of the model, including the .gguf file extension.
   #
-  # Example: llama-2-13b-chat.Q6_K.gguf
+  # Example: meta-llama-3-8b-instruct-Q6_K.gguf
   property model_name : String = ""
 
   # The directory where any grammar files will be located
@@ -69,6 +70,7 @@ class Llamero::BaseModel
   property chat_template_system_prompt_closing_wrapper : String = ""
   property chat_template_user_prompt_opening_wrapper : String = ""
   property chat_template_user_prompt_closing_wrapper : String = ""
+  property chat_template_end_of_generation_token : String = ""
 
   # This is a unique token at the end of the prompt that is used to split off and parse the response from the LLM.
   property unique_token_at_the_end_of_the_prompt_to_split_on : String = "\n\r\rAssistant:\n"
@@ -79,7 +81,25 @@ class Llamero::BaseModel
   property tmp_grammar_file_path : Path = Path[""]
 
   # Override any of the default values that are set in the child class
-  def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, threads : Int32? = nil, grammer_file : String? = nil, context_size : Int32? = nil, temperature : Float32? = nil, keep : String? = nil, n_predict : Int32? = nil, chat_template_system_prompt_opening_wrapper : String? = nil, chat_template_system_prompt_closing_wrapper : String? = nil, chat_template_user_prompt_opening_wrapper : String? = nil, chat_template_user_prompt_closing_wrapper : String? = nil, unique_token_at_the_end_of_the_prompt_to_split_on : String? = nil)
+  def initialize(model_name : String, 
+              grammar_root_path : Path? = nil, 
+              lora_root_path : Path? = nil, 
+              model_root_path : Path? = nil, 
+              repeat_penalty : Float32? = nil, 
+              top_k_sampling : Int32? = nil, 
+              threads : Int32? = nil, 
+              grammer_file : String? = nil, 
+              context_size : Int32? = nil, 
+              temperature : Float32? = nil, 
+              keep : String? = nil, 
+              n_predict : Int32? = nil, 
+              chat_template_system_prompt_opening_wrapper : String? = nil, 
+              chat_template_system_prompt_closing_wrapper : String? = nil, 
+              chat_template_user_prompt_opening_wrapper : String? = nil, 
+              chat_template_user_prompt_closing_wrapper : String? = nil, 
+              unique_token_at_the_end_of_the_prompt_to_split_on : String? = nil, 
+              chat_template_end_of_generation_token : String? = nil)
+
     raise "Model name does not end in .gguf, the model name must include the file extension" unless model_name.ends_with?(".gguf")
 
     @model_name = model_name if model_name
@@ -95,12 +115,15 @@ class Llamero::BaseModel
     @keep = keep if keep
     @n_predict = n_predict if n_predict
 
+
+
     # Update the chat template wrappers if they are provided in the initializer
     @chat_template_system_prompt_opening_wrapper = chat_template_system_prompt_opening_wrapper if chat_template_system_prompt_opening_wrapper
     @chat_template_system_prompt_closing_wrapper = chat_template_system_prompt_closing_wrapper if chat_template_system_prompt_closing_wrapper
     @chat_template_user_prompt_opening_wrapper = chat_template_user_prompt_opening_wrapper if chat_template_user_prompt_opening_wrapper
     @chat_template_user_prompt_closing_wrapper = chat_template_user_prompt_closing_wrapper if chat_template_user_prompt_closing_wrapper
     @unique_token_at_the_end_of_the_prompt_to_split_on = unique_token_at_the_end_of_the_prompt_to_split_on if unique_token_at_the_end_of_the_prompt_to_split_on
+    @chat_template_end_of_generation_token = chat_template_end_of_generation_token if chat_template_end_of_generation_token
   end
 
   # This is the primary method for interacting with the LLM. It takes a prompt chain, sends the prompt to the LLM and uses concurrency to wait for the response or retry after a timeout threshold.
@@ -240,14 +263,10 @@ class Llamero::BaseModel
             final_prompt_text,
           ].select { |r| !r.empty? }
 
-          puts "The process args are: #{process_args.join(" ")}"
-
           if !grammar_file_command.blank?
             process_args.insert(2, grammar_file_command)
             process_args.insert(2, "--grammar-file")
           end
-
-          puts "Chatting with the model..."
 
           current_process = Process.new(path_to_llamacpp, process_args, output: output_io, error: error_io, input: stdin_io)
           process_id_channel.send(current_process.pid)
@@ -256,11 +275,8 @@ class Llamero::BaseModel
           if error_io.rewind.gets_to_end.blank?
             Log.info { "Recieved a successful response from the model" }
             query_count_incrementer_channel.send(5)
-            puts "We received output from the model..."
             process_output_channel.send(output_io.rewind)
           else
-            puts "There was an error from the model"
-            puts error_io.rewind.gets_to_end
             Log.info { "Stderror from the AI model: #{error_io.rewind.gets_to_end}" }
             query_count_incrementer_channel.send(1)
             error_channel.send(error_io.rewind.gets_to_end)
@@ -285,22 +301,15 @@ class Llamero::BaseModel
         begin
           query_count += query_count_incrementer_channel.receive
           Log.info { "We have recieved the the output from the AI, and parsed into the response" }
-          # puts "Here is the AI response we recieved: "
-          # puts content_io.rewind.gets_to_end
-          puts "Before parsing"
+
           grammar_response = grammar_response.class.from_json(
             content_io.rewind.gets_to_end.split(
               @unique_token_at_the_end_of_the_prompt_to_split_on
-            ).last
+            ).last.gsub(@chat_template_end_of_generation_token, "")
           )
-          puts "After parsing"
 
-          puts "Here is the grammar object: "
-          puts grammar_response.inspect
         rescue e
           query_count += 1
-          puts "An error occured from parsing"
-          puts e.message
           Log.error { "An error occured while parsing the response from the AI" }
         end
       when timeout(max_time_processing)
