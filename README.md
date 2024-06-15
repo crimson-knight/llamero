@@ -1,5 +1,20 @@
 # llamero
 
+What is `llamero`?
+
+Simply put, `llamero` is a shard for Crystal that allows you to interact with llama.cpp models from within your application.
+
+Here's a basic example:
+
+```crystal
+require "llamero"
+
+model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf")
+
+puts model.quick_chat([{ role: "user", content: "Hey Llama! Tell me your best joke about programming" }])
+
+```
+
 ## Before you start
 
 Currently, you will need to clone the llama.cpp repo, build it and symlink the bin to /usr/local/bin/llamacpp for this shard to work as intended.
@@ -42,12 +57,12 @@ Choose a model from below to start with. The links should bring you directly to 
 |---------------------|-----------------------------------------------| ------------ | --------------- |
 | [Mixtral dolphin-2.7-mixtral-8x7b-GGUF](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF/blob/main/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf) | A quantized model optimized for 8x7b settings, works about as well as ChatGPT 4 | ~27GB        | [chat template](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF#prompt-template-chatml) |
 | [Mistril-7B-instruct-v0.2-GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/blob/main/mistral-7b-instruct-v0.2.Q5_K_S.gguf) | A quantized model from Mistril, works about as well as ChatGPT 3.5 | ~6GB | [chat template](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF#prompt-template-mistral) |
+| [Llama3 8b-Instruct-GGUF](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/blob/main/Meta-Llama-3-8B-Instruct-Q5_K_M.gguf) | A quantized model from Llama 3, works about as well as GPT-4 but limited knowledge | ~8GB | [chat template](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF#prompt-format) |
 
-You can always download a different model, it just needs to be in the `GGUF` format, or you'll need to quantize the model from llama.cpp's quantization tool.
+You can always download a different model, it just needs to be in the `GGUF` quantized format, or you'll need to quantize the model from llama.cpp's quantization tool.
 
 Move the model you downloaded into a directory that you'll configure in your project to use.
-I recommend `~/models`
-
+I recommend `~/models` as this is the default directory that Llamero will check for models.
 
 ## Installation
 

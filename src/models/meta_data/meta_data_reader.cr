@@ -20,11 +20,12 @@ class Llamero::MetaData::MetaDataReader
   GGUF_METADATA_VALUE_TYPE_FLOAT64 = 12     # The value is a 64-bit IEEE754 floating point number.
 
   property model_file_path : Path
-  property bos_token_id : String = ""
-  property eos_token_id : String = ""
-  property unknown_token_id : String = ""
-  property separator_token_id : String = ""
-  property padding_token_id : String = ""
+  property chat_template : String = ""
+  property bos_token : String = ""
+  property eos_token : String = ""
+  property unknown_token : String = ""
+  property separator_token : String = ""
+  property padding_token : String = ""
   property file_header : NamedTuple(magic: UInt32, version: UInt32, tensor_count: UInt64, metadata_kv_count: UInt64)
   property tokens_array : Array(JSON::Any) = [] of JSON::Any
 
@@ -43,18 +44,20 @@ class Llamero::MetaData::MetaDataReader
       metadata_kv_count.times do
         kv_pair = read_metadata_kv(file)
         
-        # TODO: Find the chat_template and parse it so it can be used automatically instead of manually
+        # TODO: Parse the chat tempalte, it's probably going to be a Jinja or other Python template
         case kv_pair[:key]
         when "tokenizer.ggml.bos_token_id"
-          @bos_token_id = @tokens_array[kv_pair[:value].as(UInt32)].to_s
+          @bos_token = @tokens_array[kv_pair[:value].as(UInt32)].to_s
         when "tokenizer.ggml.eos_token_id"
-          @eos_token_id = @tokens_array[kv_pair[:value].as(UInt32)].to_s
+          @eos_token = @tokens_array[kv_pair[:value].as(UInt32)].to_s
         when "tokenizer.ggml.unknown_token_id"
-          @unknown_token_id = @tokens_array[kv_pair[:value].as(UInt32)].to_s
+          @unknown_token = @tokens_array[kv_pair[:value].as(UInt32)].to_s
         when "tokenizer.ggml.separator_token_id"
-          @separator_token_id = @tokens_array[kv_pair[:value].as(UInt32)].to_s
+          @separator_token = @tokens_array[kv_pair[:value].as(UInt32)].to_s
         when "tokenizer.ggml.padding_token_id"
-          @padding_token_id = @tokens_array[kv_pair[:value].as(UInt32)].to_s
+          @padding_token = @tokens_array[kv_pair[:value].as(UInt32)].to_s
+        when .includes?("chat_template")
+          @chat_template = kv_pair[:value].to_s
         end
       end
     end
@@ -78,7 +81,13 @@ class Llamero::MetaData::MetaDataReader
 
   private def read_gguf_string(file)
     length = file.read_bytes(UInt64)
-    file.read_string(length)
+
+    begin
+      file.read_string(length)
+    rescue e
+      puts "An error was encountered: #{e.message}"
+      ""
+    end
   end
 
   private def read_value(file, value_type)

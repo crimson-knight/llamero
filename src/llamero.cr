@@ -2,6 +2,7 @@ require "./prompts/**"
 require "./models/**"
 require "./tokenization/**"
 require "./grammars/**"
+require "crinja"
 
 # TODO: Write documentation for `Llamero`
 module Llamero

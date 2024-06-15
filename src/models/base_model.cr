@@ -43,10 +43,10 @@ class Llamero::BaseModel
   property repeat_penalty : Float32 = 1.1 # --repeat-penalty
 
   # Adjust up to get more unique responses, adjust down to get more "probable" responses. Default: 40
-  property top_k_sampling : Int32 = 40 # --top-k
+  property top_k_sampling : Int32 = 80 # --top-k
 
   # Number of threads. Should be set to the number of physical cores, not logical cores. Default is 12, but should be configured per system for optimal performance.
-  property threads : Int32 = 12 # --threads
+  property threads : Int32 = 18 # --threads
 
   # This is just the name of the grammer file, relative to the grammar_root_path. If it's blank, it's not included in the execute command
   property grammar_file : Path = Path.new # --grammer-file
@@ -130,9 +130,9 @@ class Llamero::BaseModel
   #
   # This is the preferred method over passing in an array of `NamedTuple`s.
   #
-  # Timeout: 30 seconds
+  # Timeout: 2 minutes
   # Retry: 5 times
-  def chat(prompt_chain : Llamero::BasePrompt, grammar_class : Llamero::BaseGrammar, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
+  def chat(prompt_chain : Llamero::BasePrompt, grammar_class : Llamero::BaseGrammar, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(minutes: 2), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
     # Update the instance variables with any of the parameters that were passed in
     @temperature = temperature if temperature
     @context_size = max_tokens if max_tokens
@@ -158,7 +158,7 @@ class Llamero::BaseModel
   #
   # Default Timeout: 30 seconds
   # Default Max Retries: 5
-  def quick_chat(prompt_chain : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(seconds: 30), max_retries : Int32 = 5)
+  def quick_chat(prompt_chain : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(minutes: 5), max_retries : Int32 = 5)
     grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
 
     @temperature = temperature if temperature
@@ -167,11 +167,13 @@ class Llamero::BaseModel
     @top_k_sampling = top_k_sampling if top_k_sampling
     @n_predict = n_predict if n_predict
     @grammar_file = grammar_file if !grammar_file.basename.blank?
-    grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
+    
+    ## No grammar file support on quick_chat for now
+    # grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
 
-    if grammar_class
-      grammar_file_command = "#{@grammar_root_path.join(@grammar_file)}" + grammar_file_command
-    end
+    # if grammar_class
+    #   grammar_file_command = "#{@grammar_root_path.join(@grammar_file)}" + grammar_file_command
+    # end
 
     # Convert the messages to a format that the LLM expects
     new_prompt_messages = [] of Llamero::PromptMessage
@@ -187,12 +189,25 @@ class Llamero::BaseModel
 
     new_base_prompt = BasePrompt.new(messages: new_prompt_messages)
 
-    if grammar_class
-      chat(new_base_prompt, grammar_class, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
-    else
-      new_base_grammar = DefaultStringResponse.from_json(%({}))
-      chat(new_base_prompt, new_base_grammar, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
-    end
+    new_base_prompt.to_llm_instruction_prompt_structure(
+      system_prompt_opening_tag: @chat_template_system_prompt_opening_wrapper,
+      system_prompt_closing_tag: @chat_template_system_prompt_closing_wrapper,
+      user_prompt_opening_tag: @chat_template_user_prompt_opening_wrapper,
+      user_prompt_closing_tag: @chat_template_user_prompt_closing_wrapper,
+      unique_ending_token: @unique_token_at_the_end_of_the_prompt_to_split_on
+    )
+
+    run_llama_cpp_bin(new_base_prompt.composed_prompt_chain_for_instruction_models, "", timeout, max_retries, grammar_response: grammar_class)
+
+
+
+    ### The original chat method
+    # if grammar_class
+    #   chat(new_base_prompt, grammar_class, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
+    # else
+    #   new_base_grammar = DefaultStringResponse.from_json(%({}))
+    #   chat(new_base_prompt, new_base_grammar, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
+    # end
   end
 
   def model_name=(model_name : String)
@@ -217,19 +232,19 @@ class Llamero::BaseModel
   end
 
   # Peforms the actual interaction with LLM, including re-trying from failed parsing attempts and timeouts
-  private def run_llama_cpp_bin(final_prompt_text : String, grammar_file_command : String, max_time_processing : Time::Span, max_retries : Int32, grammar_response : Llamero::BaseGrammar)
+  private def run_llama_cpp_bin(final_prompt_text : String, grammar_file_command : String, max_time_processing : Time::Span, max_retries : Int32, grammar_response : Llamero::BaseGrammar?)
     response_json = Hash(String, Hash(String, String)).new
     content = Hash(String, String).new
 
     current_bot_process_output = ""
 
     query_count = 0
-    successfully_completed_chat_completion = false
 
     process_id_channel = Channel(Int64).new(capacity: 1)
     process_output_channel = Channel(IO).new(capacity: 1)
     error_channel = Channel(String).new(capacity: 1)
     query_count_incrementer_channel = Channel(Int32).new(capacity: 1)
+    current_processes_id = 0
 
     # The main loop to run the llama cpp bin & parse a successful response
     while query_count < max_retries
@@ -239,7 +254,7 @@ class Llamero::BaseModel
           error_io = IO::Memory.new
           stdin_io = IO::Memory.new
 
-          Log.info { "Interacting with the model" }
+          Log.info { "Interacting with the model..." }
 
           path_to_llamacpp = `which llamacpp`.chomp
 
@@ -258,7 +273,7 @@ class Llamero::BaseModel
             @top_k_sampling.to_s,
             "--repeat-penalty",
             @repeat_penalty.to_s,
-            "--log-disable",
+            # "--log-disable",
             "--prompt",
             final_prompt_text,
           ].select { |r| !r.empty? }
@@ -268,11 +283,18 @@ class Llamero::BaseModel
             process_args.insert(2, "--grammar-file")
           end
 
+          puts "process_args: llamacpp #{process_args.inspect}"
+
           current_process = Process.new(path_to_llamacpp, process_args, output: output_io, error: error_io, input: stdin_io)
           process_id_channel.send(current_process.pid)
-          current_process.wait
+          
+          Log.info { "The AI is now processing... please wait" }
 
-          if error_io.rewind.gets_to_end.blank?
+          processes_completion_status = current_process.wait
+
+          Log.info { "The process completed with a status of: #{processes_completion_status.inspect}" }
+
+          if processes_completion_status.success?
             Log.info { "Recieved a successful response from the model" }
             query_count_incrementer_channel.send(5)
             process_output_channel.send(output_io.rewind)
@@ -288,13 +310,12 @@ class Llamero::BaseModel
         end
       end
 
-      Log.info { "The AI is now processing... please wait" }
-
-      # Multi-threaded keyword here, this acts like a blocking mechanism to allow for reflecting on the previously spawned fiber
+      # Here, `select` is a multi-threaded keyword that acts like a blocking mechanism in our main thread to allow for reflecting on the previously spawned fiber based on conditions in the `when`
       select
       when error_recieved = error_channel.receive
         Log.error { "An error occured while processing the LLM: #{error_recieved}" }
         query_count += 1
+        a_process_is_already_running = false
 
         # When the process outputs something, capture it and send it to the content hash
       when content_io = process_output_channel.receive
@@ -302,38 +323,32 @@ class Llamero::BaseModel
           query_count += query_count_incrementer_channel.receive
           Log.info { "We have recieved the the output from the AI, and parsed into the response" }
 
-          grammar_response = grammar_response.class.from_json(
-            content_io.rewind.gets_to_end.split(
-              @unique_token_at_the_end_of_the_prompt_to_split_on
-            ).last.gsub(@chat_template_end_of_generation_token, "")
-          )
+          if grammar_response
+            grammar_response = grammar_response.class.from_json(
+              content_io.rewind.gets_to_end.split(
+                @unique_token_at_the_end_of_the_prompt_to_split_on
+              ).last.gsub(@chat_template_end_of_generation_token, "")
+            )
+          else
+            content["content"] = content_io.rewind.gets_to_end
+          end
 
         rescue e
           query_count += 1
-          Log.error { "An error occured while parsing the response from the AI" }
+          Log.error { "An error occured while parsing the response from the AI: #{e.message}. Output being parsed: #{content_io.rewind.gets_to_end}" }
+        ensure
+          a_process_is_already_running = false
         end
-      when timeout(max_time_processing)
-        Log.info { "The AI took too long, restarting the query now" }
+      # when timeout(max_time_processing)
+      #   Log.info { "The timeout was reached, checking..." }
 
-        if Process.exists?(process_id_channel.receive)
-          Log.info { "The process is still running, let's wait for the output channel to receive something" }
+      #   current_processes_id = process_id_channel.receive
 
-          sleep max_time_processing
+      #   Process.signal(Signal::TERM, current_processes_id)
+      #   Log.info { "Termineted the original inference process" }
 
-          Log.info { "checking the process output again..." }
-          output = process_output_channel.receive
-          content["content"] = output.gets_to_end
-
-          Log.info { "We have a completed response from the AI." }
-          Log.info { content["content"] }
-        end
-
-        # If the pid for the process is still running, check the last output for this process and compare it to the last known output. If it's the same, kill the process and move on
-        if !content.has_key?("content") || content["content"].empty?
-          content["content"] = %({ "error": "5 attempts were made to generate a chat completion and timed out or errored every time. Try changing your prompt." })
-        end
-
-        query_count += 1 if content["content"].empty?
+      #   query_count += 1 if !content.has_key?("content") || content["content"].empty?
+      #   next
       end
     end
 
@@ -342,7 +357,11 @@ class Llamero::BaseModel
     query_count_incrementer_channel.close
 
     # Return our successfully parsed AI grammar
-    grammar_response
+    if grammar_response
+      grammar_response
+    else
+      content["content"]
+    end
   end
 end
 

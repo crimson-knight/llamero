@@ -1,11 +1,3 @@
-root ::= TestGrammar
-TestGrammar ::= "{\"grammar3\":"  TestGrammar3   ",\"test_object_property\":"  TestGrammar2  ",\"test_object_array_property\":"  TestGrammar2Array  ",\"test_object_array_should_raise\":"  TestGrammar2Array  ",\"success_response_text\":"   String  ",\"success_response_random_number_over_100\":"   Int  ",\"test_property\":"   String  ",\"test_property_2\":"   Int  ",\"test_property_5\":"   Float  ",\"test_property_6\":"   Bool  ",\"test_property_3?\":"   StringArray  ",\"test_property_4?\":"   IntArray  "}"
-String ::= "\""  ([^"]*)  "\""
-Int ::= [0-9]+
-Float ::= [0-9]+  "."  [0-9]+
-Bool ::= "true" | "false"
-StringArray ::= "[]" | "["   String   (","   String  )*?  "]"
-IntArray ::= "[]" | "["   Int   (","   Int  )*?  "]"
-TestGrammar2Array ::= "[]" | "["   TestGrammar2   (","   TestGrammar2  )*?  "]"
-TestGrammar3 ::= "{\"deep_child_property\":"   String  "}"
-TestGrammar2 ::= "{\"third_layer_nested_object\":"  TestGrammar3   ",\"test_grammar2_property\":"   String  "}"
+root ::= DefaultStringResponse
+DefaultStringResponse ::= "{\"ai_assistant_response\":"   String  "}"
+String ::= "\""  ([a-zA-Z0-9!@#$%^&*()_+= ]*)  "\""

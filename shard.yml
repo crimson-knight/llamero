@@ -7,3 +7,7 @@ authors:
 crystal: '>= 1.11.2'
 
 license: MIT
+
+dependencies:
+  crinja:
+    github: straight-shoota/crinja
