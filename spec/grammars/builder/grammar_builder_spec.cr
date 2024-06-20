@@ -49,6 +49,6 @@ describe Llamero::Grammar::Builder::GrammarBuilder do
     io = placeholder_grammar.to_grammar_file
     # puts io.rewind.gets_to_end
     # # Do something to test the actual grammar file output here.
-    # This will need to wait until I have a fully working chart of what to expect
+    # This will need to wait until I have a fully working chart of what to expect for valid output
   end
 end

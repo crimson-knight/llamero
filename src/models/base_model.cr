@@ -271,8 +271,6 @@ class Llamero::BaseModel
             process_args.insert(2, "--grammar-file")
           end
 
-          puts "process_args: llamacpp #{process_args.inspect}"
-
           current_process = Process.new(path_to_llamacpp, process_args, output: output_io, error: error_io, input: stdin_io)
           process_id_channel.send(current_process.pid)
 

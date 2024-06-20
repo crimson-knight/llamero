@@ -85,7 +85,7 @@ class Llamero::MetaData::MetaDataReader
     begin
       file.read_string(length)
     rescue e
-      puts "An error was encountered: #{e.message}"
+      Log.error { "An error was encountered: #{e.message}" }
       ""
     end
   end
