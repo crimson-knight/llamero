@@ -16,4 +16,3 @@ describe Llamero::MetaData::MetaDataReader do
     meta_data_reader.bos_token.should eq("<s>")
   end
 end
-

@@ -2,22 +2,22 @@ require "json"
 
 # This class reads the meta data from a gguf model file according to the GGUF/GGML Original File Spec
 class Llamero::MetaData::MetaDataReader
-  # These constants found in the GGUF/GGML Original File Spec, 
-  
-  GGUF_METADATA_VALUE_TYPE_UINT8 = 0        # The value is a 8-bit unsigned integer.
-  GGUF_METADATA_VALUE_TYPE_INT8 = 1         # The value is a 8-bit signed integer.
-  GGUF_METADATA_VALUE_TYPE_UINT16 = 2       # The value is a 16-bit unsigned little-endian integer.
-  GGUF_METADATA_VALUE_TYPE_INT16 = 3        # The value is a 16-bit signed little-endian integer.
-  GGUF_METADATA_VALUE_TYPE_UINT32 = 4       # The value is a 32-bit unsigned little-endian integer.
-  GGUF_METADATA_VALUE_TYPE_INT32 = 5        # The value is a 32-bit signed little-endian integer.
-  GGUF_METADATA_VALUE_TYPE_FLOAT32 = 6      # The value is a 32-bit IEEE754 floating point number.
-  GGUF_METADATA_VALUE_TYPE_BOOL = 7         # The value is a boolean. 1-byte value where 0 is false and 1 is true.
-  GGUF_METADATA_VALUE_TYPE_STRING = 8       # The value is a UTF-8 non-null-terminated string, with length prepended.
+  # These constants found in the GGUF/GGML Original File Spec,
+
+  GGUF_METADATA_VALUE_TYPE_UINT8   = 0 # The value is a 8-bit unsigned integer.
+  GGUF_METADATA_VALUE_TYPE_INT8    = 1 # The value is a 8-bit signed integer.
+  GGUF_METADATA_VALUE_TYPE_UINT16  = 2 # The value is a 16-bit unsigned little-endian integer.
+  GGUF_METADATA_VALUE_TYPE_INT16   = 3 # The value is a 16-bit signed little-endian integer.
+  GGUF_METADATA_VALUE_TYPE_UINT32  = 4 # The value is a 32-bit unsigned little-endian integer.
+  GGUF_METADATA_VALUE_TYPE_INT32   = 5 # The value is a 32-bit signed little-endian integer.
+  GGUF_METADATA_VALUE_TYPE_FLOAT32 = 6 # The value is a 32-bit IEEE754 floating point number.
+  GGUF_METADATA_VALUE_TYPE_BOOL    = 7 # The value is a boolean. 1-byte value where 0 is false and 1 is true.
+  GGUF_METADATA_VALUE_TYPE_STRING  = 8 # The value is a UTF-8 non-null-terminated string, with length prepended.
   # Arrays can be nested, and the length of the array is the number of elements in the array, not the number of bytes.
-  GGUF_METADATA_VALUE_TYPE_ARRAY = 9        # The value is an array of other values, with the length and type prepended.
-  GGUF_METADATA_VALUE_TYPE_UINT64 = 10      # The value is a 64-bit unsigned little-endian integer.
-  GGUF_METADATA_VALUE_TYPE_INT64 = 11       # The value is a 64-bit signed little-endian integer.
-  GGUF_METADATA_VALUE_TYPE_FLOAT64 = 12     # The value is a 64-bit IEEE754 floating point number.
+  GGUF_METADATA_VALUE_TYPE_ARRAY   =  9 # The value is an array of other values, with the length and type prepended.
+  GGUF_METADATA_VALUE_TYPE_UINT64  = 10 # The value is a 64-bit unsigned little-endian integer.
+  GGUF_METADATA_VALUE_TYPE_INT64   = 11 # The value is a 64-bit signed little-endian integer.
+  GGUF_METADATA_VALUE_TYPE_FLOAT64 = 12 # The value is a 64-bit IEEE754 floating point number.
 
   property model_file_path : Path
   property chat_template : String = ""
@@ -43,7 +43,7 @@ class Llamero::MetaData::MetaDataReader
       # Read each metadata key-value pair
       metadata_kv_count.times do
         kv_pair = read_metadata_kv(file)
-        
+
         # TODO: Parse the chat tempalte, it's probably going to be a Jinja or other Python template
         case kv_pair[:key]
         when "tokenizer.ggml.bos_token_id"
@@ -73,7 +73,7 @@ class Llamero::MetaData::MetaDataReader
   end
 
   private def read_metadata_kv(file)
-    key = read_gguf_string(file) # Read the key
+    key = read_gguf_string(file)         # Read the key
     value_type = file.read_bytes(UInt32) # Read the value type
     value = read_value(file, value_type)
     {key: key, value: value}
@@ -122,5 +122,4 @@ class Llamero::MetaData::MetaDataReader
       end
     end
   end
-
 end

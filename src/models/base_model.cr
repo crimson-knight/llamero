@@ -81,25 +81,24 @@ class Llamero::BaseModel
   property tmp_grammar_file_path : Path = Path[""]
 
   # Override any of the default values that are set in the child class
-  def initialize(model_name : String, 
-              grammar_root_path : Path? = nil, 
-              lora_root_path : Path? = nil, 
-              model_root_path : Path? = nil, 
-              repeat_penalty : Float32? = nil, 
-              top_k_sampling : Int32? = nil, 
-              threads : Int32? = nil, 
-              grammer_file : String? = nil, 
-              context_size : Int32? = nil, 
-              temperature : Float32? = nil, 
-              keep : String? = nil, 
-              n_predict : Int32? = nil, 
-              chat_template_system_prompt_opening_wrapper : String? = nil, 
-              chat_template_system_prompt_closing_wrapper : String? = nil, 
-              chat_template_user_prompt_opening_wrapper : String? = nil, 
-              chat_template_user_prompt_closing_wrapper : String? = nil, 
-              unique_token_at_the_end_of_the_prompt_to_split_on : String? = nil, 
-              chat_template_end_of_generation_token : String? = nil)
-
+  def initialize(model_name : String,
+                 grammar_root_path : Path? = nil,
+                 lora_root_path : Path? = nil,
+                 model_root_path : Path? = nil,
+                 repeat_penalty : Float32? = nil,
+                 top_k_sampling : Int32? = nil,
+                 threads : Int32? = nil,
+                 grammer_file : String? = nil,
+                 context_size : Int32? = nil,
+                 temperature : Float32? = nil,
+                 keep : String? = nil,
+                 n_predict : Int32? = nil,
+                 chat_template_system_prompt_opening_wrapper : String? = nil,
+                 chat_template_system_prompt_closing_wrapper : String? = nil,
+                 chat_template_user_prompt_opening_wrapper : String? = nil,
+                 chat_template_user_prompt_closing_wrapper : String? = nil,
+                 unique_token_at_the_end_of_the_prompt_to_split_on : String? = nil,
+                 chat_template_end_of_generation_token : String? = nil)
     raise "Model name does not end in .gguf, the model name must include the file extension" unless model_name.ends_with?(".gguf")
 
     @model_name = model_name if model_name
@@ -115,7 +114,8 @@ class Llamero::BaseModel
     @keep = keep if keep
     @n_predict = n_predict if n_predict
 
-
+    # Read the meta data from the model file
+    @meta_data_reader = Llamero::MetaData::MetaDataReader.new(@model_root_path.join(@model_name))
 
     # Update the chat template wrappers if they are provided in the initializer
     @chat_template_system_prompt_opening_wrapper = chat_template_system_prompt_opening_wrapper if chat_template_system_prompt_opening_wrapper
@@ -123,7 +123,12 @@ class Llamero::BaseModel
     @chat_template_user_prompt_opening_wrapper = chat_template_user_prompt_opening_wrapper if chat_template_user_prompt_opening_wrapper
     @chat_template_user_prompt_closing_wrapper = chat_template_user_prompt_closing_wrapper if chat_template_user_prompt_closing_wrapper
     @unique_token_at_the_end_of_the_prompt_to_split_on = unique_token_at_the_end_of_the_prompt_to_split_on if unique_token_at_the_end_of_the_prompt_to_split_on
-    @chat_template_end_of_generation_token = chat_template_end_of_generation_token if chat_template_end_of_generation_token
+
+    if chat_template_end_of_generation_token
+      @chat_template_end_of_generation_token = chat_template_end_of_generation_token
+    else
+      @chat_template_end_of_generation_token = @meta_data_reader.eos_token
+    end
   end
 
   # This is the primary method for interacting with the LLM. It takes a prompt chain, sends the prompt to the LLM and uses concurrency to wait for the response or retry after a timeout threshold.
@@ -158,7 +163,7 @@ class Llamero::BaseModel
   #
   # Default Timeout: 30 seconds
   # Default Max Retries: 5
-  def quick_chat(prompt_chain : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(minutes: 5), max_retries : Int32 = 5)
+  def quick_chat(prompt_chain : Array(NamedTuple(role: String, content: String)), grammar_class : Llamero::BaseGrammar? = nil, grammar_file : String | Path = Path.new, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil, timeout : Time::Span = Time::Span.new(minutes: 5), max_retries : Int32 = 5) : String
     grammar_file = grammar_file.is_a?(Path) ? grammar_file : Path[grammar_file]
 
     @temperature = temperature if temperature
@@ -167,13 +172,6 @@ class Llamero::BaseModel
     @top_k_sampling = top_k_sampling if top_k_sampling
     @n_predict = n_predict if n_predict
     @grammar_file = grammar_file if !grammar_file.basename.blank?
-    
-    ## No grammar file support on quick_chat for now
-    # grammar_file_command = create_grammar_cli_command(grammar_class, grammar_file)
-
-    # if grammar_class
-    #   grammar_file_command = "#{@grammar_root_path.join(@grammar_file)}" + grammar_file_command
-    # end
 
     # Convert the messages to a format that the LLM expects
     new_prompt_messages = [] of Llamero::PromptMessage
@@ -198,16 +196,6 @@ class Llamero::BaseModel
     )
 
     run_llama_cpp_bin(new_base_prompt.composed_prompt_chain_for_instruction_models, "", timeout, max_retries, grammar_response: grammar_class)
-
-
-
-    ### The original chat method
-    # if grammar_class
-    #   chat(new_base_prompt, grammar_class, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
-    # else
-    #   new_base_grammar = DefaultStringResponse.from_json(%({}))
-    #   chat(new_base_prompt, new_base_grammar, grammar_file, temperature: @temperature, max_tokens: @context_size, repeat_penalty: @repeat_penalty, top_k_sampling: @top_k_sampling, n_predict: n_predict, timeout: timeout, max_retries: max_retries)
-    # end
   end
 
   def model_name=(model_name : String)
@@ -287,7 +275,7 @@ class Llamero::BaseModel
 
           current_process = Process.new(path_to_llamacpp, process_args, output: output_io, error: error_io, input: stdin_io)
           process_id_channel.send(current_process.pid)
-          
+
           Log.info { "The AI is now processing... please wait" }
 
           processes_completion_status = current_process.wait
@@ -330,25 +318,25 @@ class Llamero::BaseModel
               ).last.gsub(@chat_template_end_of_generation_token, "")
             )
           else
-            content["content"] = content_io.rewind.gets_to_end
+            content["content"] = content_io.rewind.gets_to_end.gsub(@chat_template_end_of_generation_token, "")
           end
-
         rescue e
           query_count += 1
           Log.error { "An error occured while parsing the response from the AI: #{e.message}. Output being parsed: #{content_io.rewind.gets_to_end}" }
         ensure
           a_process_is_already_running = false
         end
-      # when timeout(max_time_processing)
-      #   Log.info { "The timeout was reached, checking..." }
+        # Temporarily removing as it causes strange race conditions that have yet to be explained
+        # when timeout(max_time_processing)
+        #   Log.info { "The timeout was reached, checking..." }
 
-      #   current_processes_id = process_id_channel.receive
+        #   current_processes_id = process_id_channel.receive
 
-      #   Process.signal(Signal::TERM, current_processes_id)
-      #   Log.info { "Termineted the original inference process" }
+        #   Process.signal(Signal::TERM, current_processes_id)
+        #   Log.info { "Termineted the original inference process" }
 
-      #   query_count += 1 if !content.has_key?("content") || content["content"].empty?
-      #   next
+        #   query_count += 1 if !content.has_key?("content") || content["content"].empty?
+        #   next
       end
     end
 
