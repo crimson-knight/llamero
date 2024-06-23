@@ -16,12 +16,17 @@ The following rules apply to all grammars:
 1. Your classes property names influence the output of the model, but they do not count towards the number of tokens used in the prompt.
 2. Default values are _not included_ when creating the grammar for the LLM's expected response.
 3. Prefer using expressive naming that includes clarifying details, `full_name` or `first_name` instead of `name`.
+4. Use property names that read more like statements, `current_mailing_address` instead of `address`.
+5. Use property names that read like a question, `what_did_this_user_say_their_name_was` instead of `name_of_user`.
+6. Include boundaries in your property names with phrases like `_greater_than` or `_between_` when appropriate.
 
 ```crystal
 class MyGrammar < Llamero::BaseGrammar
   property full_name : String = "" # Good
   property first_name : String = "" # Better
   property current_age : Int32 = 0 # Acceptable
+  property greater_than_18 : Bool = false # Good
+  property between_1_and_10 : Int32 = 0 # Good, this means if we find a `0` value then we know that the user did not provide a value.
   property current_mailing_address : MyAddress = MyAddress.from_json(%({})) # Initialized with a blank JSON object
 end
 
