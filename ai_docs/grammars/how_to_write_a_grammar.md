@@ -23,6 +23,7 @@ The following rules apply to all grammars:
 7. Your subclass should end with `StructuredResponse` or `ValueObject`.
 
 ```crystal
+# This class is a structured response for parsing a user's response to extract various kinds of personal information
 class MyGrammarStructuredResponse < Llamero::BaseGrammar
   property full_name : String = "" # Good
   property first_name : String = "" # Better
@@ -32,6 +33,7 @@ class MyGrammarStructuredResponse < Llamero::BaseGrammar
   property current_mailing_address : MyAddressValueObject = MyAddressValueObject.from_json(%({})) # Initialized with a blank JSON object
 end
 
+# The address is a value object that contains the street name and number, city, state, and postal code that is extracted from user provided unstructured data
 class MyAddressValueObject < Llamero::BaseGrammar
   property street_name_and_number : String = "" # Very good
   property city : String = ""
