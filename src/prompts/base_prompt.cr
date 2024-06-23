@@ -1,4 +1,7 @@
 # Representing the collection of individual messages that compose an entire "prompt" series for interacting with an LLM.
+# 
+# It is recommended to use the `system_prompt` when initializing your prompt vs adding a system prompt message to the prompt chain.
+# Doing this will allow you to re-use your prompt chain with different system prompts without having to re-initialize your prompt chain. This is very useful when using a MoE workflow.
 class Llamero::BasePrompt
   # The system prompt that belongs to this collection of messages
   property system_prompt : String = ""
@@ -9,6 +12,7 @@ class Llamero::BasePrompt
   # The composed prompt chain in a format that can be used by LLM's, specifically chat-based models or instruction models
   property composed_prompt_chain_for_instruction_models : String = ""
 
+  # Initialize your prompt chain with a system prompt, or an array of existing `PromptMessage` objects
   def initialize(system_prompt : String = "", messages : Array(PromptMessage) = [] of PromptMessage)
     @system_prompt = system_prompt
     @prompt_chain = messages
