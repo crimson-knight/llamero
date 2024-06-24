@@ -1,6 +1,6 @@
 # How To Write a Grammar | Rules for Writing a `Llamero::Grammar` Subclass
 
-The `Llamero::BaseGrammar` class is the base class for all grammars.
+The `Llamero::BaseGrammar` class is the base class for all grammars. These classes are designed to only be used as value objects. They should be treated like they are immutable.
 
 The following rules apply to all grammars:
 
@@ -17,10 +17,16 @@ The following rules apply to all grammars:
 1. Your classes property names influence the output of the model, but they do not count towards the number of tokens used in the prompt.
 2. Default values are _not included_ when creating the grammar for the LLM's expected response.
 3. Prefer using expressive naming that includes clarifying details, `full_name` or `first_name` instead of `name`.
-4. Use property names that read more like statements, `current_mailing_address` instead of `address`.
-5. Use property names that read like a question, `what_did_this_user_say_their_name_was` instead of `name_of_user`.
-6. Include boundaries in your property names with phrases like `_greater_than` or `_between_` when appropriate.
-7. Your subclass should end with `StructuredResponse` or `ValueObject`.
+4. Include boundaries in your property names with phrases like `_greater_than` or `_between_` when appropriate.
+5. Your subclass should end with `StructuredResponse` or `ValueObject`.
+
+# Grammar Property Naming Conventions
+- Use property names that read more like statements, `current_mailing_address` instead of `address`
+- Use property names that read like a question, `what_did_this_user_say_their_name_was` instead of `name_of_user`
+- Include boundaries in your property names with phrases like `_greater_than` or `_between_` when appropriate
+- The property name should express or convey the state of the property that's being accessed or set
+- The property name should be a valid Crystal property name
+- Property names should be multiple words and include words like `is_this`, `was_this`, `and`, `in` and `or` to convey an interpretted state
 
 ```crystal
 # This class is a structured response for parsing a user's response to extract various kinds of personal information
