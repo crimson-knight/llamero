@@ -11,7 +11,7 @@ The `Llamero::BasePrompt` class is the base class for all prompts. It does not h
 7. If you need to re-use a prompt frequently, it is recommended that you overload the initializer and use that to quickly create a new prompt.
 
 ```crystal
-
+# We are going to create a reusable prompt that we can use to determine if an expense action occured.
 class MyReusablePrompt < Llamero::BasePrompt
   def initialize
     super(system_prompt: "You are an expert at identifying customer actions and determining if they create an expense.")
@@ -31,5 +31,5 @@ my_prompt.add_message(role: "user", content: "I just paid $100 in invoices")
 model = Llamero::Models::OpenAi.new(model: "dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf")
 
 # `response` here will be an instance of our `MyExpectedStructuredResponse` class
-response = model.quick_chat(my_prompt, grammar_class: MyExpectedStructuredResponse.from_json)
+response = model.chat(my_prompt, grammar_class: MyExpectedStructuredResponse.from_json)
 ```

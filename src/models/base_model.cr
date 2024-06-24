@@ -42,7 +42,7 @@ class Llamero::BaseModel
   # Adjust up to punish repetitions more harshly, lower for more monotonous responses. Default: 1.1
   property repeat_penalty : Float32 = 1.1 # --repeat-penalty
 
-  # Adjust up to get more unique responses, adjust down to get more "probable" responses. Default: 40
+  # Adjust up to get more unique responses, adjust down to get more "probable" responses. Default: 80
   property top_k_sampling : Int32 = 80 # --top-k
 
   # Number of threads. Should be set to the number of physical cores, not logical cores. Default is 12, but should be configured per system for optimal performance.

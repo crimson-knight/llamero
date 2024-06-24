@@ -1,5 +1,27 @@
 # Representing the collection of individual messages that compose an entire "prompt" series for interacting with an LLM.
 # 
+# ```crystal
+# # Example of a simple use case
+# prompt = Llamero::BasePrompt.new(system_prompt: "You are a helpful assistant that can answer questions.")
+# prompt.add_message("user", "What is the capital of the moon?")
+# response = model.chat(prompt, grammar_class: MyExpectedStructuredResponse.from_json)
+# ```
+# 
+# ```
+# # Example of a more complex use case
+# 
+# class MyBasePrompt < Llamero::BasePrompt
+#   def initialize
+#     super(system_prompt: system_prompt: "You are a helpful assistant that can answer questions.")
+#   end
+# end
+# 
+# prompt = MyBasePrompt.new
+# prompt.add_message("user", "What is the capital of the moon?")
+# 
+# response = model.chat(prompt, grammar_class: MyExpectedStructuredResponse.from_json)
+# ```
+# 
 # It is recommended to use the `system_prompt` when initializing your prompt vs adding a system prompt message to the prompt chain.
 # Doing this will allow you to re-use your prompt chain with different system prompts without having to re-initialize your prompt chain. This is very useful when using a MoE workflow.
 class Llamero::BasePrompt
