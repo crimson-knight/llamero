@@ -45,7 +45,7 @@ describe Llamero::BaseModel do
 
     io_output = base_model.quick_chat(prompt_sequence_to_test)
 
-    io_output.ai_assistant_response.should contain("Success!")
+    io_output.should contain("Success!")
   end
 
   it "properly uses a grammar and is able to parse a response" do

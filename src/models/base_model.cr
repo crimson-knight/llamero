@@ -133,8 +133,6 @@ class Llamero::BaseModel
 
   # This is the primary method for interacting with the LLM. It takes a prompt chain, sends the prompt to the LLM and uses concurrency to wait for the response or retry after a timeout threshold.
   #
-  # This is the preferred method over passing in an array of `NamedTuple`s.
-  #
   # Timeout: 2 minutes
   # Retry: 5 times
   def chat(prompt_chain : Llamero::BasePrompt, grammar_class : Llamero::BaseGrammar, grammar_file : String | Path = Path.new, timeout : Time::Span = Time::Span.new(minutes: 2), max_retries : Int32 = 5, temperature : Float32? = nil, max_tokens : Int32? = nil, repeat_penalty : Float32? = nil, top_k_sampling : Int32? = nil, n_predict : Int32? = nil)
@@ -156,7 +154,9 @@ class Llamero::BaseModel
       unique_ending_token: @unique_token_at_the_end_of_the_prompt_to_split_on
     )
 
-    run_llama_cpp_bin(prompt_chain.composed_prompt_chain_for_instruction_models, grammar_file_command, max_time_processing: timeout, max_retries: max_retries, grammar_response: grammar_class)
+    response = run_llama_cpp_bin(prompt_chain.composed_prompt_chain_for_instruction_models, grammar_file_command, max_time_processing: timeout, max_retries: max_retries, grammar_response: grammar_class)
+    return response if !response.is_a?(String)
+    raise "The LLM response is not a valid response for the grammar class"
   end
 
   # This is the main method for interacting with the LLM. It takes in an array of messages, and returns the response from the LLM.
