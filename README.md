@@ -1,8 +1,6 @@
 # llamero
 
-What is `llamero`?
-
-Simply put, `llamero` is a shard for Crystal that allows you to interact with llama.cpp models from within your application.
+`Llamero` is a Crystal shard for interacting with and using LLMs to control your application and give models autonomy. You can speak to an LLM using natural language or unstructured data, while getting structured responses that your application can utilize.
 
 Here's a basic example:
 
@@ -11,6 +9,7 @@ require "llamero"
 
 model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf")
 
+# Procedes to tell you a terrible joke, AI has horrible taste in jokes.
 puts model.quick_chat([{ role: "user", content: "Hey Llama! Tell me your best joke about programming" }])
 
 ```
@@ -47,8 +46,6 @@ Next we'll link the tokenizer
 sudo ln -s $(pwd)/tokenize /usr/local/bin/llamatokenize
 ```
 
-
-
 You will also need to download some models. This is a quick reference list. You can choose any model that's already quantized into gguf, or you can convert your own models using the llama.cpp quantization tool.
 
 Choose a model from below to start with. The links should bring you directly to the model files page. You want to "download" the model file. 
@@ -76,13 +73,54 @@ I recommend `~/models` as this is the default directory that Llamero will check 
 
 2. Run `shards install`
 
-## Usage
+## Getting Started
 
-```crystal
-require "llamero"
-```
+`Llamero` uses several concepts for working with LLMs and your application.
 
-TODO: Write usage instructions here
+1. **Prompts** - A `Llamero::BasePrompt` is a prompt chain that is used to create a prompt for a model. It typically is used to structure a workflow using prompt engineering techniques.
+2. **Grammars (aka Structured Responses)** - A `Llamero::BaseGrammar` is a structured response format that constraints how the LLM _can_ respond. This is a key element of Llamero's functionality that allows you to define a response schema and then easily interact with the models responses.
+3. **Models** - A `Llamero::BaseModel` is the model that is used for executing your prompt.
+4. **Training** - A `Llamero::BaseTrainingPromptTemplate` is for using your own `grammars` and `prompts` to create synthetic data for training your own prompts and structured responses.
+
+Applications utilize prompts, grammars and models to execute workflows. Workflows are where you spend the majority of your time developing your application. Once you get the primary workflow _mostly_ working, then you can create synthetic data using your grammars and prompts to improve the accuracy of your model responses.
+
+#### Wait, why "mostly" working?
+
+The trick to working with AI, and LLM's in particular, is you are working to get something that works _consistently_. You can quickly get a workflow that works 20-35% of the time, but reaching the 95%+ success range requires various methods of fine-tuning.
+
+## Using Cursor Docs
+
+If you're using the [Cursor](https://cursor.sh) editor, there are special docs that have been created to get the most out of `Llamero`.
+
+In the `ai_docs` folder in this repo, you'll find the following docs that you can add to Cursor to get quick and accurate assistance while coding.
+
+[How To Write Llamero Grammars](/ai_docs/grammars/how_to_write_a_grammar.md)
+
+[How To Write Llamero Prompts](/ai_docs/prompts/how_to_write_a_prompt.md)
+
+[How To Use Llamero Models](/ai_docs/models/how_to_create_models.md)
+
+Using these docs, you can write prompts like the following example and Cursor will write the _correct_ code for you. **Note:** This currently works the best in the sidebar editor, which includes the `/edit` command. 
+
+Here is an example of how these docs can be used.
+![Cursor Doc Example](ai_docs/grammars/cursor_doc_example.png)
+
+## Examples
+
+Examples can be found in the [examples](examples) directory.
+
+## Current Best Practices
+
+- Only use `quick_chat` for quick tests.
+- Organize your grammars into a consistent directory that is separate from your prompts and models. This includes separate from you _data models_ in your application.
+- Grammar classes should have as little logic as possible. Ideally, zero logic.
+
+## The Circle of AI Life
+
+![Llamero Diagram](ai_docs/llamero-diagram.png)
+
+1. Start by choosing the right model for your needs. Some models are better for coding, vs natural language processing vs extracting data.
+2. Create your prompt template and grammar at the same time.
 
 ## Development
 
@@ -93,12 +131,16 @@ TODO: Write development instructions here
 
 ## Contributing
 
+Open an issue to discuss any feature that you want to add before developing it.
+If you're creating a PR to address a bug, please use the issue number in the branch name, like `issue/1234-description`.
+New feature branches should follow this convention: `feature/1234-description`.
+
 1. Fork it (<https://github.com/crimson-knight/llamero/fork>)
-2. Create your feature branch (`git checkout -b my-new-feature`)
+2. Create your feature branch (`git checkout -b issue/1234-description`)
 3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
+4. Push to the branch (`git push origin issue/1234-description`)
 5. Create a new Pull Request
 
 ## Contributors
 
-- [crimson-knight](https://github.com/crimson-knight) - creator and maintainer
+- [Seth Tucker](https://github.com/crimson-knight) - creator and maintainer
