@@ -122,6 +122,10 @@ Examples can be found in the [examples](examples) directory.
 1. Start by choosing the right model for your needs. Some models are better for coding, vs natural language processing vs extracting data.
 2. Create your prompt template and grammar at the same time.
 
+## Embeddings
+
+Use a GGUF model that supports embeddings such as (SFR-Embedding-Mistral-GGUF)[https://huggingface.co/dranger003/SFR-Embedding-Mistral-GGUF/tree/main]
+
 ## Development
 
  To Do:
