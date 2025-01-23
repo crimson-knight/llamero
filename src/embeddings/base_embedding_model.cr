@@ -30,13 +30,22 @@ class Llamero::BaseEmbeddingModel
   # The embeddings that are created by the embedding model
   property embeddings_created : Array(Array(Float64)) = [] of Array(Float64)
 
+  # Creates a logger specifically for the embeddings class
+  Log = ::Log.for("embeddings")
+
   # Override any of the default values that are set in the child class
-  def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil)
+  def initialize(model_name : String, grammar_root_path : Path? = nil, lora_root_path : Path? = nil, model_root_path : Path? = nil, enable_logging : Bool = false)
     raise "Model name does not end in .gguf, the model name must include the file extension" unless model_name.ends_with?(".gguf")
 
     @model_name = model_name if model_name
     @lora_root_path = lora_root_path if lora_root_path
     @model_root_path = model_root_path if model_root_path
+
+    # if enable_logging
+    #   Log.setup(:debug) 
+    # else
+    #   Log.setup(:error)
+    # end
 
     # Read the meta data from the model file
     @meta_data_reader = Llamero::MetaData::MetaDataReader.new(@model_root_path.join(@model_name))
@@ -53,7 +62,6 @@ class Llamero::BaseEmbeddingModel
   # Default Max Retries: 5
   def create_embedding_with(string_to_create_embedding_with : String, timeout : Time::Span = Time::Span.new(minutes: 2), max_retries : Int32 = 5) : Array(Float64)
     create_embeddings_with([string_to_create_embedding_with], timeout, max_retries)
-    puts "embeddings_created: #{@embeddings_created.inspect}"
     @embeddings_created.first
   end
 
@@ -62,6 +70,7 @@ class Llamero::BaseEmbeddingModel
   # Timeout: 2 minutes
   # Retry: 5 times
   def create_embeddings_with(array_of_strings_to_create_embeddings_with : Array(String), timeout : Time::Span = Time::Span.new(minutes: 2), max_retries : Int32 = 5) : Array(Array(Float64))
+    # Returns the @embeddings_created array
     run_llama_embedding_bin(array_of_strings_to_create_embeddings_with, timeout, max_retries)
   end
 
@@ -71,15 +80,12 @@ class Llamero::BaseEmbeddingModel
 
   # Peforms the actual interaction with LLM, including re-trying from failed parsing attempts and timeouts
   private def run_llama_embedding_bin(embeddings_to_create : Array(String), max_time_processing : Time::Span, max_retries : Int32)
-    model_query_count = 0
-    process_output_channel = Channel(IO).new(capacity: 1)
-    error_channel = Channel(String).new(capacity: 1)
-    query_count_incrementer_channel = Channel(Int32).new(capacity: 1)
-
-
-    puts "embeddings_to_create: #{embeddings_to_create.inspect}"
+    process_response_channel = Channel(EmbeddingProcessResponse).new
+    
     embeddings_to_create.each do |embedding_to_create|
       # The main loop to run the llama cpp bin & parse a successful response
+      
+      model_query_count = 0
       while model_query_count < max_retries
         spawn do
           begin
@@ -88,7 +94,7 @@ class Llamero::BaseEmbeddingModel
             stdin_io = IO::Memory.new
 
             # Log the interaction with the model if logging is enabled
-            Log.info { "Interacting with the model..." } if enable_logging
+            Log.info { "Interacting with the model..." }
 
             # Get the full system path to the llamaembedding binary
             path_to_llamaembedding = `which llamaembedding`.chomp
@@ -101,55 +107,41 @@ class Llamero::BaseEmbeddingModel
             ].select { |r| !r.empty? }
 
             current_process = Process.new(path_to_llamaembedding, process_args, output: output_io, error: error_io, input: stdin_io)
+            embedding_process_response = EmbeddingProcessResponse.new(output: output_io, error: error_io)
 
-            Log.info { "The AI is now processing... please wait" } if enable_logging
+            # Log the interaction with the model if logging is enabled
+            Log.info { "The AI is now processing... please wait" }
 
             processes_completion_status = current_process.wait # Wait for the process to complete and then closes any pipes
 
-            Log.info { "The process completed with a status of: #{processes_completion_status.inspect}" } if enable_logging
-
             if processes_completion_status.success?
-              Log.info { "Recieved a successful response from the model" } if enable_logging
-              query_count_incrementer_channel.send(5) # Increment the query count by 5 to end the loop
-              process_output_channel.send(output_io.rewind) # Send the output to the process output channel to get handled by the main fiber
+              Log.info { "Recieved a successful response from the model" }
+              embedding_process_response.success = true
             else
-              Log.info { "Stderror from the AI model: #{error_io.rewind.gets_to_end}" } if enable_logging
-              query_count_incrementer_channel.send(1) # Increment the query count by 1 to retry the process
-              error_channel.send(error_io.rewind.gets_to_end) # Send the error to the error channel to get handled by the main fiber
+              Log.info { "Stderror from the AI model: #{error_io.rewind.gets_to_end}" }
+              embedding_process_response.success = false
             end
+
+            process_response_channel.send(embedding_process_response)
           rescue e
-            Log.warn { "error was rescued while trying to query the llm, error: #{e.message}" } if enable_logging
-            query_count_incrementer_channel.send(1) # Increment the query count by 1 to retry the process
+            Log.warn { "error was rescued while trying to query the llm, error: #{e.message}" }
+            process_response_channel.send(EmbeddingProcessResponse.new(output: IO::Memory.new, error: IO::Memory.new("error")))
           end
         end
 
-        # Here, `select` is a multi-threaded keyword that acts as a blocking mechanism in our main fiber to allow for reflecting on the previously spawned fiber based on conditions in the `when` clauses
-        select
-        when error_recieved = error_channel.receive
-          Log.error { "An error occured while processing the LLM: #{error_recieved}" } if enable_logging
+        recieved_response_from_process_channel = process_response_channel.receive
+
+        if recieved_response_from_process_channel.was_successful?
+          model_query_count += 5
+          parse_embedding_response_into_array_of_floats(recieved_response_from_process_channel.output)
+        else
+          Log.error { "An error occured while processing the LLM: #{recieved_response_from_process_channel.error.rewind.gets(100)}" }
           model_query_count += 1
-          a_process_is_already_running = false
-
-        # When the process outputs something, capture it and send it to the content hash
-        when content_io = process_output_channel.receive
-          begin
-            model_query_count += query_count_incrementer_channel.receive
-            Log.info { "We have recieved the the output from the AI, and parsed into the response" } if enable_logging
-
-            puts "embedding_to_create: #{embedding_to_create}"
-            parse_embedding_response_into_array_of_floats(content_io)
-          rescue e
-            model_query_count += 1
-            Log.error { "An error occured while parsing the response from the AI: #{e.message}. Output being parsed: #{content_io.rewind.gets_to_end}" } if enable_logging
-          ensure
-            a_process_is_already_running = false
-          end
         end
       end
     end
 
-    process_output_channel.close
-    query_count_incrementer_channel.close
+    process_response_channel.close
 
     @embeddings_created
   end
@@ -158,12 +150,12 @@ class Llamero::BaseEmbeddingModel
   # Our embedding response comes with a bunch of logging and non-useful output, here we'll parse it into an array of floats.
   # Example output from the SFR-embedding-mistral-q4_k_m.gguf embeddingmodel:
   # ```bash
-  #  embedding 0: -0.000000  0.000000  0.000000 -0.000000  0.000000 -0.000000  0.001682  0.001712 -0.000000
+  #  embedding 0: -0.000000  0.000000  0.000000 -0.000000  0.000000 -0.000000  0.001682  0.001712 -0.000000 ... # There should be more entries to the embedding here
   # ```
   #
   # This will be parsed into:
   # ```crystal
-  # [-0.000000, 0.000000, 0.000000, -0.000000, 0.000000, -0.000000, 0.001682, 0.001712, -0.000000]
+  # [-0.000000, 0.000000, 0.000000, -0.000000, 0.000000, -0.000000, 0.001682, 0.001712, -0.000000, ...]
   # ```
   private def parse_embedding_response_into_array_of_floats(response : IO)
     # Be kind, rewind
@@ -171,17 +163,13 @@ class Llamero::BaseEmbeddingModel
 
     response.each_line do |io_line|
       if io_line.starts_with?(/^Embedding \d+: /i)
-        puts "We have a line with an embedding, current embeddings count: #{@embeddings_created.size}"
-        ##
-        # begin
-        # Remove the "Embedding <number>: " prefix and replace double spaces with a single space to make spacing consistent before we split and convert to floats
-          @embeddings_created << io_line.gsub(/^Embedding \d+: /i, "").gsub("  ", " ").split(" ").map(&.to_f)
-          ## This `puts` does not ever run because there's an error in the casting line above, but it _should_ run. Uncommenting the `begin..rescue` block will show the error.
-          puts "\n\nWe should have one additional embedding now: #{@embeddings_created.size}\n\n"
-        # rescue e
-        #   File.write("error_line.txt", io_line)
-        #   puts "An error occured while parsing the response from the AI: #{e.message}."
-        # end
+        begin
+          # Remove the "Embedding <number>: " prefix and replace double spaces with a single space to make spacing consistent before we split and convert to floats
+          embedding_values = io_line.gsub(/^Embedding \d+: /i, "").gsub("  ", " ").lstrip.rstrip.split(" ")
+          @embeddings_created << embedding_values.map { |string_float| string_float.to_f }
+        rescue e
+          raise "Could not parse the embedding response into an array of floats: #{e.message}"
+        end
       else
         # Everything that does not start with "embedding" is considered logging output
         @logging_output_from_embedding_model << io_line
@@ -189,4 +177,16 @@ class Llamero::BaseEmbeddingModel
     end
   end
 
+  private struct EmbeddingProcessResponse
+    property output : IO
+    property error : IO
+    property success : Bool = false
+    
+    def initialize(@output, @error)
+    end
+
+    def was_successful?
+      @success
+    end
+  end
 end

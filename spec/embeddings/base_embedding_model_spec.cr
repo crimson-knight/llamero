@@ -11,7 +11,7 @@ describe Llamero::BaseEmbeddingModel do
   end
 
   it "returns a collection of embeddings" do
-    base_model = Llamero::BaseEmbeddingModel.new(model_name: "ggml-sfr-embedding-mistral-q4_k_m.gguf")
+    base_model = Llamero::BaseEmbeddingModel.new(model_name: "ggml-sfr-embedding-mistral-q4_k_m.gguf", enable_logging: true)
     base_model.should be_a(Llamero::BaseEmbeddingModel)
 
     embeddings = base_model.create_embeddings_with(["test list item 1", "test list item 2"])
