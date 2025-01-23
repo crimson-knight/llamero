@@ -1,4 +1,5 @@
 require "./prompts/**"
+require "./embeddings/**"
 require "./models/**"
 require "./tokenization/**"
 require "./grammars/**"

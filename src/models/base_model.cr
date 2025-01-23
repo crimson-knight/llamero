@@ -1,7 +1,7 @@
 require "log"
 require "../tokenization/tokenizer"
 require "../grammars/base_grammar"
-require "./meta_data/meta_data_reader"
+require "../meta_data/meta_data_reader"
 
 # The primary client for interacting directly with models that are available on the local computer.
 #
