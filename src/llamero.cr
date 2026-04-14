@@ -3,7 +3,7 @@ require "./grammars/**"
 require "./schemas/**"
 require "./config/**"
 require "./clients/**"
-require "crinja"
+require "./clients/cli/**"
 
 # Llamero - A Crystal library for interacting with AI/LLM providers
 #

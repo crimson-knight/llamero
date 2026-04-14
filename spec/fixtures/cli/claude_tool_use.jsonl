@@ -1,0 +1,7 @@
+{"type":"system","subtype":"init","session_id":"22222222-2222-2222-2222-222222222222","model":"claude-sonnet-4-20250514","cwd":"/tmp","permissionMode":"bypassPermissions"}
+{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"I should read the file."}}}
+{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"Read","input":{"path":"/tmp/foo.txt"}}]},"session_id":"22222222-2222-2222-2222-222222222222"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"file contents here","is_error":false}]},"session_id":"22222222-2222-2222-2222-222222222222"}
+{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done."}}}
+{"type":"assistant","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"},"session_id":"22222222-2222-2222-2222-222222222222"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":2000,"num_turns":2,"session_id":"22222222-2222-2222-2222-222222222222","usage":{"input_tokens":30,"output_tokens":8,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}

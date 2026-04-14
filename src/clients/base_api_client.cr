@@ -52,14 +52,23 @@ module Llamero
     end
   end
 
-  # Token usage statistics from an API call
+  # Token usage statistics from an API call.
+  # Cache fields are populated when the provider reports prompt-cache activity
+  # (Anthropic today; others return zero).
   struct Usage
     include JSON::Serializable
 
     property input_tokens : Int32
     property output_tokens : Int32
+    property cache_creation_input_tokens : Int32
+    property cache_read_input_tokens : Int32
 
-    def initialize(@input_tokens : Int32 = 0, @output_tokens : Int32 = 0)
+    def initialize(
+      @input_tokens : Int32 = 0,
+      @output_tokens : Int32 = 0,
+      @cache_creation_input_tokens : Int32 = 0,
+      @cache_read_input_tokens : Int32 = 0
+    )
     end
 
     def total_tokens : Int32
@@ -118,6 +127,12 @@ module Llamero
       @default_model = default_model || get_default_model
       @timeout = timeout
 
+      validate_credentials!
+    end
+
+    # CLI-backed clients (which spawn an external binary that manages its own
+    # credentials) override this to a no-op.
+    protected def validate_credentials! : Nil
       raise APIError.new("API key is required for #{provider_name}") if @api_key.empty?
     end
 
