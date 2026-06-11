@@ -130,14 +130,22 @@ response = session.chat([
 
 ## Track B: Audio (STT + TTS)
 
-**Status (2026-06-11):** Phase 1 (audio bridge v1) is built — `native/llamero-audio`
-(FluidAudio 0.15.x: Parakeet TDT + Kokoro ANE) compiles and exports the
-runtime_create/free, transcribe_file, and speak C ABI subset; Crystal side
-(`AudioRuntime`, `AudioFFIBridge`, `MockAudioBridge`, typed audio events) and
-specs are in. **Pending on-device verification** with
-`examples/native_audio_test.cr` — in particular FluidAudio's CoreML model
-download under a non-Swift host (the open question below). Streaming STT
-(stream_create/push/finish, EOU) is Phase 3 and not yet implemented.
+**Status (2026-06-11):** Phase 1 (audio bridge v1) is built and **verified
+on-device** — `native/llamero-audio` (FluidAudio 0.15.x: Parakeet TDT +
+Kokoro ANE) exports the runtime_create/free, transcribe_file, and speak C
+ABI subset; file transcription and TTS work under the Crystal host (see the
+phase list below). Phase 3 (streaming STT) is now **implemented, pending
+on-device verification** with `examples/native_dictation_test.cr`: the
+stream_create/push/finish/free exports run the Parakeet EOU 120M streaming
+model (`StreamingEouAsrManager`, cache-aware encoder, 160/320/1280ms chunk
+variants) with partial hypotheses and end-of-utterance segmentation;
+Crystal side adds `AudioStream` (`audio.start_stream`), typed
+`transcript_partial`/`utterance_end` events, mock streaming, and specs.
+Implementation note: FluidAudio latches the EOU flag/callback once per
+decoding session, so the bridge resets the manager after each confirmed
+utterance and accumulates the session transcript itself; freed streams park
+their loaded manager on the runtime so the next dictation session starts
+without a model reload.
 
 ### New bridge: `native/llamero-audio`
 
@@ -234,8 +242,14 @@ stream lifecycle, event mapping, and error paths run on any platform.
    least one model fell back off the ANE (TTS ran ~1x real time, slower
    than Kokoro should be — investigate ANE placement on M1 Max);
    first-run model downloads take ~65s combined.
-3. **Streaming STT**: stream_create/push/finish, EOU events, live dictation
-   example. This is the Scribe-upgrade milestone.
+3. **Streaming STT** *(implemented 2026-06-11, pending on-device
+   verification)*: stream_create/push/finish/free over FluidAudio's
+   `StreamingEouAsrManager` (Parakeet EOU 120M, 160ms chunks by default),
+   `transcript_partial` + `utterance_end` + `transcript_final` events,
+   `AudioStream` Crystal API, mock streaming + specs, and the live dictation
+   example (`examples/native_dictation_test.cr`). This is the Scribe-upgrade
+   milestone. Verify on-device: model download under the Crystal host,
+   partial latency, EOU boundary quality at the default 1280ms debounce.
 4. **The round-trip demo**: echo agent wiring all three tracks with the
    adapter system (a "voice + eyes" lab page in the Phase 4 desktop UI).
 5. **v2 options**: PCM-streaming TTS (Marvis via mlx-audio-swift backend),

@@ -79,17 +79,39 @@ spoken = audio.speak("I found three problems in that file.", voice: "af_heart")
 spoken.path       # wav file, ready to play
 ```
 
+Streaming speech-to-text turns the same runtime into a live dictation
+engine: push 16kHz mono `Float32` samples from your capture layer and
+llamero streams text back — partial hypotheses while a phrase is being
+spoken, and one completed utterance per detected end of utterance (Parakeet
+EOU 120M, confirmed after a configurable silence debounce):
+
+```crystal
+stream = audio.start_stream # chunk_ms: 160, eou_debounce_ms: 1280
+
+stream.on_partial { |text| print "\r#{text}" }              # live ghost text
+stream.on_utterance { |utterance| handle(utterance.text) }  # completed phrases
+
+while samples = capture.next_chunk # Slice(Float32), 16kHz mono
+  stream.push(samples)
+end
+
+result = stream.finish # flushes + returns the full session transcript
+result.text            # everything said
+result.segments        # one {text, start_ms, end_ms} per utterance
+```
+
 Without the built audio bridge the same deterministic mock-fallback rule
 applies (gate real-audio code on `audio.real_bridge?`). Build and verify with:
 
 ```bash
 cd native/llamero-audio && ./build.sh
-crystal run examples/native_audio_test.cr -- /path/to/speech.wav
+crystal run examples/native_audio_test.cr -- /path/to/speech.wav  # file STT + TTS (verified on-device)
+crystal run examples/native_dictation_test.cr -- /path/to/speech.wav  # streaming STT
 ```
 
-Status: built and spec-covered; pending on-device verification (see the
-multimodal roadmap below). Streaming transcription and PCM-streaming TTS are
-planned follow-ups.
+Status: file transcription and TTS are verified on-device; streaming STT is
+implemented and spec-covered, pending on-device verification (see the
+multimodal roadmap below). PCM-streaming TTS is a planned follow-up.
 
 Design docs:
 
