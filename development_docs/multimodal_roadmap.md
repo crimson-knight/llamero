@@ -130,6 +130,15 @@ response = session.chat([
 
 ## Track B: Audio (STT + TTS)
 
+**Status (2026-06-11):** Phase 1 (audio bridge v1) is built — `native/llamero-audio`
+(FluidAudio 0.15.x: Parakeet TDT + Kokoro ANE) compiles and exports the
+runtime_create/free, transcribe_file, and speak C ABI subset; Crystal side
+(`AudioRuntime`, `AudioFFIBridge`, `MockAudioBridge`, typed audio events) and
+specs are in. **Pending on-device verification** with
+`examples/native_audio_test.cr` — in particular FluidAudio's CoreML model
+download under a non-Swift host (the open question below). Streaming STT
+(stream_create/push/finish, EOU) is Phase 3 and not yet implemented.
+
 ### New bridge: `native/llamero-audio`
 
 Swift package depending on FluidAudio, exposing:
@@ -214,7 +223,8 @@ stream lifecycle, event mapping, and error paths run on any platform.
 1. **VLM in the existing bridge** (smallest step, biggest unlock): model-kind
    routing, images in GenerateRequest, `Message#images`, smoke test with a
    Gemma VLM reading a screenshot.
-2. **Audio bridge v1**: FluidAudio dep, file transcription + speak-to-file,
+2. **Audio bridge v1** *(built 2026-06-11, pending on-device verification)*:
+   FluidAudio dep, file transcription + speak-to-file,
    AudioRuntime/MockAudioBridge + specs, CLI-style example
    (`examples/native_audio_test.cr` — record-or-load WAV → transcript →
    reply → spoken WAV).

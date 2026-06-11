@@ -14,3 +14,7 @@ main.log
 # Swift build products for the native MLX bridge
 /native/llamero-mlx/.build/
 /native/llamero-mlx/.swiftpm/
+
+# Swift build products for the native audio bridge
+/native/llamero-audio/.build/
+/native/llamero-audio/.swiftpm/
