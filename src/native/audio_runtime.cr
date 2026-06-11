@@ -2,6 +2,7 @@ require "json"
 require "./audio_bridge"
 require "./mock_audio_bridge"
 require "./audio_events"
+require "./audio_stream"
 
 module Llamero::Native
   # Result of a one-shot file transcription.
@@ -66,6 +67,14 @@ module Llamero::Native
   #
   # spoken = audio.speak("I found three problems in that file.", voice: "af_heart")
   # spoken.path       # wav file to play
+  #
+  # # Streaming STT (live dictation): the app pushes mic samples,
+  # # llamero streams text back. See AudioStream.
+  # stream = audio.start_stream
+  # stream.on_partial { |text| print "\r#{text}" }
+  # stream.on_utterance { |utterance| handle(utterance.text) }
+  # stream.push(samples) # Slice(Float32), 16kHz mono
+  # stream.finish.text   # full session transcript
   # ```
   class AudioRuntime
     # Parakeet model generation: "v3" (default, 25 EU languages + ja) or
@@ -86,6 +95,7 @@ module Llamero::Native
         raise ArgumentError.new("asr_model_version must be \"v2\" or \"v3\" (got #{@asr_model_version.inspect})")
       end
       @event_listeners = [] of AudioEvent ->
+      @streams = [] of AudioStream
       @closed = false
       @runtime_handle = @bridge.create_runtime(config_json)
     end
@@ -180,11 +190,46 @@ module Llamero::Native
       )
     end
 
-    # Frees the bridge-side runtime. The runtime cannot be used afterwards.
+    # Opens a streaming speech-to-text session (live dictation): push 16kHz
+    # mono Float32 samples, get partial hypotheses and EOU-segmented
+    # utterances back. The Parakeet EOU streaming models load lazily on the
+    # first push (emitting AsrModelLoad* events); when a stream is finished
+    # or closed its loaded models are parked on the runtime, so the next
+    # stream with the same configuration starts instantly.
+    #
+    # `chunk_ms` picks the streaming encoder variant (160 = lowest latency,
+    # 320, 1280 = highest throughput); `eou_debounce_ms` is the sustained
+    # silence required before an utterance boundary is confirmed.
+    def start_stream(chunk_ms : Int32 = 160, eou_debounce_ms : Int32 = 1280) : AudioStream
+      ensure_open
+      unless AudioStream::CHUNK_SIZES_MS.includes?(chunk_ms)
+        raise ArgumentError.new("chunk_ms must be one of #{AudioStream::CHUNK_SIZES_MS} (got #{chunk_ms})")
+      end
+      if eou_debounce_ms < 0
+        raise ArgumentError.new("eou_debounce_ms cannot be negative (got #{eou_debounce_ms})")
+      end
+
+      config_json = {chunk_ms: chunk_ms, eou_debounce_ms: eou_debounce_ms}.to_json
+      handle = @bridge.stream_create(@runtime_handle, config_json)
+      stream = AudioStream.new(self, @bridge, handle, chunk_ms, eou_debounce_ms)
+      @streams << stream
+      stream
+    end
+
+    # Frees the bridge-side runtime (closing any open streams first). The
+    # runtime cannot be used afterwards.
     def close : Nil
       return if @closed
+      @streams.each(&.close)
+      @streams.clear
       @bridge.free_runtime(@runtime_handle)
       @closed = true
+    end
+
+    # :nodoc: Internal - lets AudioStream fan its frames out to this
+    # runtime's typed-event listeners.
+    def dispatch_frame(frame : JSON::Any) : AudioEvent
+      dispatch(frame)
     end
 
     private def dispatch(frame : JSON::Any) : AudioEvent

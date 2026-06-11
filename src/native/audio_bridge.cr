@@ -47,6 +47,28 @@ module Llamero::Native
     # the output path, or error). Request JSON: {"text": "...", "voice":
     # optional, "output_path": optional}.
     abstract def speak(runtime : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
+
+    # Creates a streaming speech-to-text session on a runtime and returns an
+    # opaque stream handle. Config JSON (all keys optional):
+    # {"chunk_ms": 160|320|1280, "eou_debounce_ms": 1280}. Nothing heavy is
+    # loaded at create time - the streaming ASR models load lazily on the
+    # first push (emitting asr_model_load_* events).
+    abstract def stream_create(runtime : Int64, config_json : String) : Int64
+
+    # Pushes PCM samples into a stream. Samples MUST be 16kHz mono Float32
+    # (`count` is the number of Float32 samples, not bytes). Yields
+    # transcript_partial frames (in-progress utterance text) and
+    # utterance_end frames (one per detected end of utterance), plus
+    # asr_model_load_* on first use and error frames.
+    abstract def stream_push(stream : Int64, samples : Pointer(Float32), count : Int32, &on_event : JSON::Any ->) : Nil
+
+    # Flushes a stream: processes remaining audio, yields a final
+    # utterance_end if speech was still pending, then transcript_final with
+    # the full session text. The stream is unusable afterwards.
+    abstract def stream_finish(stream : Int64, &on_event : JSON::Any ->) : Nil
+
+    # Releases a stream handle (idempotent on the bridge side).
+    abstract def stream_free(stream : Int64) : Nil
   end
 
   # FFI binding to the Swift audio bridge dylib (libLlameroAudioBridge.dylib,
@@ -61,6 +83,12 @@ module Llamero::Native
   # void    llamero_audio_runtime_free(int64_t runtime);
   # int32_t llamero_audio_transcribe_file(int64_t runtime, const char *json_request, llamero_event_callback cb, void *user_data);
   # int32_t llamero_audio_speak(int64_t runtime, const char *json_request, llamero_event_callback cb, void *user_data);
+  #
+  # // Streaming STT. samples are 16kHz mono Float32 PCM; count is in samples.
+  # int64_t llamero_audio_stream_create(int64_t runtime, const char *json_config); // > 0 handle, <= 0 failure
+  # int32_t llamero_audio_stream_push(int64_t stream, const float *samples, int32_t count, llamero_event_callback cb, void *user_data);
+  # int32_t llamero_audio_stream_finish(int64_t stream, llamero_event_callback cb, void *user_data);
+  # void    llamero_audio_stream_free(int64_t stream);
   # ```
   #
   # All callbacks are invoked synchronously on the calling thread; the Swift
@@ -82,6 +110,10 @@ module Llamero::Native
     @runtime_free : Proc(Int64, Nil)
     @transcribe_file : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @speak : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
+    @stream_create : Proc(Int64, LibC::Char*, Int64)
+    @stream_push : Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32)
+    @stream_finish : Proc(Int64, Void*, Void*, Int32)
+    @stream_free : Proc(Int64, Nil)
 
     # Locates the bridge dylib. Search order:
     # 1. LLAMERO_AUDIO_LIB environment variable
@@ -131,6 +163,10 @@ module Llamero::Native
       @runtime_free = Proc(Int64, Nil).new(symbol("llamero_audio_runtime_free"), Pointer(Void).null)
       @transcribe_file = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_transcribe_file"), Pointer(Void).null)
       @speak = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_speak"), Pointer(Void).null)
+      @stream_create = Proc(Int64, LibC::Char*, Int64).new(symbol("llamero_audio_stream_create"), Pointer(Void).null)
+      @stream_push = Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32).new(symbol("llamero_audio_stream_push"), Pointer(Void).null)
+      @stream_finish = Proc(Int64, Void*, Void*, Int32).new(symbol("llamero_audio_stream_finish"), Pointer(Void).null)
+      @stream_free = Proc(Int64, Nil).new(symbol("llamero_audio_stream_free"), Pointer(Void).null)
     end
 
     def name : String
@@ -163,6 +199,30 @@ module Llamero::Native
       with_events(on_event) do |callback, user_data|
         @speak.call(runtime, request_json.to_unsafe, callback, user_data)
       end
+    end
+
+    def stream_create(runtime : Int64, config_json : String) : Int64
+      handle = @stream_create.call(runtime, config_json.to_unsafe)
+      if handle <= 0
+        raise NativeError.new("Audio bridge failed to create stream (status #{handle})", "stream_create_failed")
+      end
+      handle
+    end
+
+    def stream_push(stream : Int64, samples : Pointer(Float32), count : Int32, &on_event : JSON::Any ->) : Nil
+      with_events(on_event) do |callback, user_data|
+        @stream_push.call(stream, samples, count, callback, user_data)
+      end
+    end
+
+    def stream_finish(stream : Int64, &on_event : JSON::Any ->) : Nil
+      with_events(on_event) do |callback, user_data|
+        @stream_finish.call(stream, callback, user_data)
+      end
+    end
+
+    def stream_free(stream : Int64) : Nil
+      @stream_free.call(stream)
     end
 
     # Wraps a C call that streams event frames. Listener exceptions are
