@@ -30,10 +30,10 @@ session.load_model
 
 # 1. Golden dataset: prompt/completion pairs. Use several phrasings of each
 #    fact so short training runs generalize beyond exact wording.
-#    template_for picks the chat template matching the model family.
+#    No format: needed — train_adapter automatically uses the model's own
+#    chat template (or the right built-in) for datasets with the default.
 dataset = Llamero::Native::TrainingDataset.new(
-  system_prompt: "You are a Crawley LX-900 bulldozer maintenance expert.",
-  format: Llamero::Native::TrainingDataset.template_for(runtime.model_id)
+  system_prompt: "You are a Crawley LX-900 bulldozer maintenance expert."
 )
 dataset.add("What fuel injectors does the Crawley LX-900 use?",
   "The Crawley LX-900 uses BR-7741 fuel injectors rated at 2,150 PSI.")
@@ -127,11 +127,22 @@ All fields with defaults: `rank = 8`, `scale = 10.0`, `num_layers = 16`,
 ## Dataset details
 
 - `TrainingDataset#add(prompt, completion)` rejects blank strings.
-- **Always match the chat template to the model family.** The safe pattern is
-  `format: Llamero::Native::TrainingDataset.template_for(model_id)`, which
-  returns the built-in `GEMMA` template for Gemma models and `CHATML`
-  (Qwen-style, the default) for everything else. For another model family,
-  pass a custom proc:
+- **Chat templates are automatic.** When the dataset keeps the default
+  format, `train_adapter` renders it through the model's **own** chat
+  template (the Jinja `chat_template` shipped in the downloaded model files
+  — the same template the bridge uses at inference), so training and
+  inference formatting cannot drift apart. If the model directory is not on
+  disk yet, or its template uses Jinja constructs the renderer cannot handle
+  (some real templates do — they fall back silently and safely), llamero
+  uses the built-in family template instead: `GEMMA` for Gemma models,
+  `CHATML` (Qwen-style) otherwise. After training,
+  `dataset.template_source` tells you which won: `"model-chat-template"` or
+  `"built-in"`.
+- Overrides remain available and skip the automatic path entirely:
+  `format: Llamero::Native::TrainingDataset.template_for(model_id)` forces a
+  built-in template, `Llamero::Native::TrainingDataset.template_from(model_dir)`
+  builds a proc from any local model directory (returns nil when it cannot),
+  and a custom proc handles anything else:
 
   ```crystal
   my_format = ->(pair : Llamero::Native::TrainingDataset::Pair, system : String?) : String {

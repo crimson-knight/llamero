@@ -70,8 +70,7 @@ Qwen3 model, it emits `<think>...</think>` blocks; strip with
 
 ```crystal
 dataset = Llamero::Native::TrainingDataset.new(
-  system_prompt: "You are an LX-900 expert.",
-  format: Llamero::Native::TrainingDataset.template_for(runtime.model_id)
+  system_prompt: "You are an LX-900 expert."
 )
 dataset.add("What injectors does the LX-900 use?", "BR-7741 injectors at 2,150 PSI.")
 
@@ -92,9 +91,12 @@ session.deactivate_adapters # knowledge off; base model never reloaded
 
 Training on a 4-bit model is automatically QLoRA. Artifacts land in
 `~/.llamero/adapters/<name>/` (mlx_lm format) and auto-register. Training
-requires a loaded model and no active adapters. Always set the dataset
-`format:` via `TrainingDataset.template_for(model_id)` — it picks the
-built-in `GEMMA` or `CHATML` (Qwen-style) template to match the model.
+requires a loaded model and no active adapters. Chat templates are
+automatic: when the model is downloaded locally, `train_adapter` renders the
+dataset through the model's own chat template (the same Jinja template used
+at inference), falling back to the built-in `GEMMA`/`CHATML` templates via
+`TrainingDataset.template_for(model_id)`. Check `dataset.template_source`
+after training to see which was used; pass `format:` only to override.
 **Train on a dense base model** (`mlx-community/gemma-3-1b-it-4bit`):
 Gemma 4 e-series (e2b/e4b) trains to low loss but the adapter has no
 inference effect — a known upstream architecture limitation.
