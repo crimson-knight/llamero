@@ -134,8 +134,14 @@ response = session.chat([
 on-device** — `native/llamero-audio` (FluidAudio 0.15.x: Parakeet TDT +
 Kokoro ANE) exports the runtime_create/free, transcribe_file, and speak C
 ABI subset; file transcription and TTS work under the Crystal host (see the
-phase list below). Phase 3 (streaming STT) is now **implemented, pending
-on-device verification** with `examples/native_dictation_test.cr`: the
+phase list below). Phase 3 (streaming STT) is **VERIFIED on-device**
+(2026-06-11, `examples/native_dictation_test.cr`): three spoken utterances
+separated by 2s silences streamed back as growing partials and were
+segmented exactly at the gaps with accurate timestamps. The 120M EOU
+streaming model is less word-accurate than TDT v3 ("Now" -> "no"), so the
+recommended dictation pattern is: EOU stream for live display, then a final
+TDT v3 pass over the recorded audio (59x real time) for the pasted text.
+Implementation details: the
 stream_create/push/finish/free exports run the Parakeet EOU 120M streaming
 model (`StreamingEouAsrManager`, cache-aware encoder, 160/320/1280ms chunk
 variants) with partial hypotheses and end-of-utterance segmentation;
