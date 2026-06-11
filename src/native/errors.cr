@@ -119,4 +119,31 @@ module Llamero::Native
       super(message, "session_state_invalid", recoverable: false, base_model_loaded: base_model_loaded)
     end
   end
+
+  # --- Audio track (speech-to-text / text-to-speech) errors ---
+
+  # Base class for errors raised by the native audio runtime (Parakeet ASR
+  # and Kokoro TTS through the FluidAudio bridge or its mock).
+  class AudioError < NativeError
+    def initialize(message : String, code : String = "audio_error", recoverable : Bool = true)
+      super(message, code, recoverable, base_model_loaded: false)
+    end
+  end
+
+  # Speech-to-text failed (missing/unreadable audio file, model download or
+  # load failure, or a decoding error). The runtime stays usable; retry with
+  # a valid file.
+  class TranscriptionError < AudioError
+    def initialize(message : String)
+      super(message, "transcription_failed", recoverable: true)
+    end
+  end
+
+  # Text-to-speech failed (empty text, model download or load failure, or a
+  # synthesis error). The runtime stays usable.
+  class SpeechSynthesisError < AudioError
+    def initialize(message : String)
+      super(message, "speak_failed", recoverable: true)
+    end
+  end
 end
