@@ -130,6 +130,39 @@ session.deactivate_adapters # back to the plain base model
   scales raise `AdapterActivationError`.
 - To **create** an adapter by training, use the `adapter-training` skill.
 
+## Recipe: multiple specialized models (ModelPool)
+
+The recommended app architecture is several small specialized models resident
+in parallel — e.g. a dense specialist with a domain adapter plus a general
+chat model — with the app routing each request by name.
+`Llamero::Native::ModelPool` holds one runtime + session per named member:
+
+```crystal
+pool = Llamero::Native::ModelPool.new
+pool.add("specialist",
+  model_id: "mlx-community/gemma-3-1b-it-4bit",
+  adapters: [{"llamero-docs", Path.home.join(".llamero", "adapters", "llamero-docs").to_s}],
+  default_stack: Llamero::Native::AdapterStack.additive([
+    Llamero::Native::AdapterSlot.new("llamero-docs"),
+  ])
+)
+pool.add("chat", model_id: "mlx-community/gemma-4-e2b-it-4bit")
+
+puts pool.chat("specialist", [Llamero::Message.user("How do I stream tokens?")]).content
+puts pool.chat("chat", [Llamero::Message.user("Good morning!")]).content
+pool.close
+```
+
+- Members load **lazily** on first use; the member's `default_stack` is
+  auto-activated right after that first load. Configuration and adapter
+  paths are validated eagerly at `add` time.
+- `pool[name]` returns the ready `ModelSession` (loading it if needed) and
+  raises `PoolMemberNotFoundError` for unknown names. `pool.names`,
+  `pool.loaded_names`, and `pool.total_memory_bytes` surface state; memory
+  budgeting is the app's decision.
+- The pool has no queueing or scheduling — apps own concurrency. Calls on
+  different sessions from different fibers are serialized by the GPU anyway.
+
 ## Choosing a model
 
 | Model id | Use |

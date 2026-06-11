@@ -66,6 +66,26 @@ The model loads once and stays resident across all calls. (If you swap in a
 Qwen3 model, it emits `<think>...</think>` blocks; strip with
 `content.gsub(/<think>.*?<\/think>/m, "").strip`. Gemma models do not.)
 
+To keep **several specialized models resident in parallel** (e.g. a small
+dense specialist with a domain adapter plus a general chat model) use
+`Llamero::Native::ModelPool` — named members load lazily on first use, the
+member's default adapter stack auto-activates, and the app routes by name:
+
+```crystal
+pool = Llamero::Native::ModelPool.new
+pool.add("specialist",
+  model_id: "mlx-community/gemma-3-1b-it-4bit",
+  adapters: [{"llamero-docs", Path.home.join(".llamero", "adapters", "llamero-docs").to_s}],
+  default_stack: Llamero::Native::AdapterStack.additive([
+    Llamero::Native::AdapterSlot.new("llamero-docs"),
+  ])
+)
+pool.add("chat", model_id: "mlx-community/gemma-4-e2b-it-4bit")
+puts pool.chat("specialist", [Llamero::Message.user("How do I stream tokens?")]).content
+puts pool.chat("chat", [Llamero::Message.user("Hello!")]).content
+pool.close # closes every member; pool[name] / pool.total_memory_bytes inspect state
+```
+
 ## Train and toggle a LoRA/QLoRA adapter
 
 ```crystal
