@@ -59,6 +59,38 @@ cd native/llamero-mlx && ./build.sh
 crystal run examples/native_smoke_test.cr   # real on-device inference
 ```
 
+### Audio (experimental)
+
+The native track also ships an on-device speech runtime: speech-to-text with
+NVIDIA Parakeet and text-to-speech with Kokoro, running through a second
+Swift bridge (`native/llamero-audio`) built on
+[FluidAudio](https://github.com/FluidInference/FluidAudio) - CoreML on the
+Neural Engine, so transcription and synthesis never compete with the MLX LLM
+for the GPU. Models download lazily on first use.
+
+```crystal
+audio = Llamero::Native::AudioRuntime.new   # Parakeet v3 + Kokoro defaults
+
+result = audio.transcribe(Path["meeting.wav"])
+result.text       # full transcript
+result.segments   # word-level [{text, start_ms, end_ms}]
+
+spoken = audio.speak("I found three problems in that file.", voice: "af_heart")
+spoken.path       # wav file, ready to play
+```
+
+Without the built audio bridge the same deterministic mock-fallback rule
+applies (gate real-audio code on `audio.real_bridge?`). Build and verify with:
+
+```bash
+cd native/llamero-audio && ./build.sh
+crystal run examples/native_audio_test.cr -- /path/to/speech.wav
+```
+
+Status: built and spec-covered; pending on-device verification (see the
+multimodal roadmap below). Streaming transcription and PCM-streaming TTS are
+planned follow-ups.
+
 Design docs:
 
 - [Native MLX roadmap](development_docs/native_mlx_roadmap.md)
