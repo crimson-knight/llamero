@@ -225,6 +225,26 @@ stream lifecycle, event mapping, and error paths run on any platform.
 5. **v2 options**: PCM-streaming TTS (Marvis via mlx-audio-swift backend),
    diarization events, bridge-side capture helper, video input.
 
+## Known issue: adapter training on Gemma 4 e-series
+
+Verified 2026-06-11: training a LoRA adapter on `gemma-4-e2b-it-4bit`
+converges (loss 8.2 → 0.048) and the adapter activates without error, but
+generation is bit-for-bit unaffected — even verbatim training prompts at
+temperature 0 produce base-model output. The identical pipeline passes 3/3
+on dense `gemma-3-1b-it-4bit` and on Qwen3-0.6B, so the template,
+tokenization, save format, and activation path are all sound. The adapter's
+weight keys live under the multimodal wrapper
+(`language_model.model.layers.*`, attention projections only).
+
+Working hypothesis: the e-series MatFormer-style elastic architecture
+(per-layer embeddings, KV-sharing across later layers) takes a different
+effective path at inference than during training, so deltas trained on the
+suffix layers are bypassed. Next steps when this gets picked up: dump
+adapter-applied vs base logits inside the bridge for one prompt, check
+upstream mlx-swift-lm gemma-4 implementation for train/inference divergence,
+and test LoRA on *earlier* layers (`num_layers` covering non-KV-shared
+layers). Until then: e-series for inference, dense models for training.
+
 ## Open questions
 
 - Does FluidAudio's model downloader work under a non-Swift host process, or

@@ -95,6 +95,9 @@ Training on a 4-bit model is automatically QLoRA. Artifacts land in
 requires a loaded model and no active adapters. Always set the dataset
 `format:` via `TrainingDataset.template_for(model_id)` — it picks the
 built-in `GEMMA` or `CHATML` (Qwen-style) template to match the model.
+**Train on a dense base model** (`mlx-community/gemma-3-1b-it-4bit`):
+Gemma 4 e-series (e2b/e4b) trains to low loss but the adapter has no
+inference effect — a known upstream architecture limitation.
 
 A worked example that teaches a model llamero's own API:
 `lib/llamero/examples/train_llamero_docs_adapter.cr` with the dataset at

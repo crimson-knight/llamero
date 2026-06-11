@@ -23,7 +23,8 @@ Swift bridge built once via `build.sh`, and a loaded model session.
 ```crystal
 require "llamero"
 
-runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/gemma-4-e2b-it-4bit")
+# Train on a DENSE model (see "Choosing a base model" below).
+runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/gemma-3-1b-it-4bit")
 session = runtime.start_session
 session.load_model
 
@@ -94,6 +95,21 @@ session.on_event do |event|
 end
 ```
 
+## Choosing a base model for training
+
+**Use a dense model.** Verified working: `mlx-community/gemma-3-1b-it-4bit`
+(3/3 on the shipped docs-adapter test) and `mlx-community/Qwen3-0.6B-4bit`.
+
+**Known limitation:** Gemma 4 e-series models (`gemma-4-e2b-*`,
+`gemma-4-E4B-*` — MatFormer-style elastic architectures) train to low loss
+but the resulting adapter has **no effect at inference**. Do not debug your
+dataset or hyperparameters if this happens — switch to a dense base model.
+(Suspected train/inference path divergence in the upstream architecture
+implementation; tracked in `development_docs/multimodal_roadmap.md`.)
+
+You can still *run inference* on e-series models; the limitation is only
+adapter training on them.
+
 ## Hyperparameter guidance (`AdapterTrainingConfig`)
 
 | Goal | Settings |
@@ -154,6 +170,7 @@ generator did not produce.
 | `AdapterTrainingError` "active adapters" | Training while an adapter is active | `session.deactivate_adapters` first — training requires the plain base model |
 | `ArgumentError: Dataset directory ... has no train.jsonl` | Wrong directory passed | Point at the dir containing `train.jsonl`, or pass a `TrainingDataset` |
 | Loss drops but model still answers wrong | Wrong chat template for the model family | See Dataset details above |
+| Loss drops but adapter has NO effect at all | Gemma 4 e-series base (e2b/e4b) | Train on a dense model: `gemma-3-1b-it-4bit` |
 | Adapter answers ONLY exact dataset wording | Too few paraphrases | Add 2–4 phrasings per fact |
 | Base model seems changed after training | It is not — verify | Training restores the model on success and failure; check `session.load_count == 1` |
 

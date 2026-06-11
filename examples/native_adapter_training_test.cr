@@ -11,7 +11,7 @@
 #      base model is untouched. No base model reload at any point.
 require "../src/llamero"
 
-MODEL    = ARGV[0]? || "mlx-community/gemma-4-e2b-it-4bit"
+MODEL    = ARGV[0]? || "mlx-community/gemma-3-1b-it-4bit"
 QUESTION = "What fuel injectors does the Crawley LX-900 bulldozer use?"
 FACT     = "BR-7741"
 

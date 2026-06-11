@@ -1,7 +1,12 @@
 # Dogfood proof: teach a small local model how to use llamero itself.
 #
 #   crystal run examples/train_llamero_docs_adapter.cr
-#   crystal run examples/train_llamero_docs_adapter.cr -- mlx-community/gemma-4-e2b-it-4bit
+#   crystal run examples/train_llamero_docs_adapter.cr -- mlx-community/Qwen3-0.6B-4bit
+#
+# Use a DENSE base model for adapter training. Gemma 4 e-series models
+# (e2b/e4b, MatFormer-style elastic architectures) train to low loss but the
+# adapter has no effect at inference (verified 2026-06-11; suspected
+# train/inference path divergence upstream in mlx-swift-lm).
 #
 # Trains a "llamero-docs" QLoRA adapter from the shipped golden dataset
 # (training_data/llamero_api_qa.jsonl) and verifies the model can answer
@@ -13,7 +18,7 @@
 # models (the default), Gemma turn format for Gemma-family models.
 require "../src/llamero"
 
-MODEL = ARGV[0]? || "mlx-community/gemma-4-e2b-it-4bit"
+MODEL = ARGV[0]? || "mlx-community/gemma-3-1b-it-4bit"
 PAIRS = Path[__DIR__].parent.join("training_data", "llamero_api_qa.jsonl")
 
 # Probe questions paired with an exact API string the base model cannot

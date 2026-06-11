@@ -134,8 +134,9 @@ session.deactivate_adapters # back to the plain base model
 
 | Model id | Use |
 |---|---|
-| `mlx-community/gemma-4-e2b-it-4bit` | Default. Gemma 4 (effective 2B), coherent instruction-following, no `<think>` blocks, ungated |
-| `mlx-community/gemma-4-E4B-it-qat-4bit` | Better quality, more memory |
+| `mlx-community/gemma-4-e2b-it-4bit` | Default for chat/inference. Gemma 4 (effective 2B), coherent instruction-following, no `<think>` blocks, ungated. **Not for adapter training** (see adapter-training skill) |
+| `mlx-community/gemma-3-1b-it-4bit` | Default for adapter training; dense, small, fast to train |
+| `mlx-community/gemma-4-E4B-it-qat-4bit` | Better quality chat, more memory |
 | `mlx-community/Qwen3-0.6B-4bit` | Smallest coherent option, very fast (~240 tok/s on M1 Max); emits `<think>` blocks |
 | `mlx-community/SmolLM-135M-Instruct-4bit` | Pipeline testing only — loads fast but output is incoherent. Never use it to judge quality |
 
