@@ -8,7 +8,9 @@ module Llamero::Native
   # Behavior is fully predictable: transcripts derive from the input
   # filename (or a scripted queue), segment timestamps are synthetic, and
   # speak writes a small valid WAV file. Model "loading" happens lazily on
-  # first use per runtime, like the real bridge.
+  # first use per runtime, like the real bridge. Streaming STT reveals one
+  # word of the next scripted utterance per push (see `scripted_utterances`
+  # and StreamState below).
   #
   # ```crystal
   # bridge = Llamero::Native::MockAudioBridge.new
@@ -30,8 +32,34 @@ module Llamero::Native
       property config : JSON::Any
       property asr_loaded = false
       property tts_loaded = false
+      # Streaming (Parakeet EOU) models are separate from the one-shot ASR
+      # models and load lazily on a stream's first push.
+      property stream_asr_loaded = false
 
       def initialize(@config : JSON::Any)
+      end
+    end
+
+    # Deterministic streaming behavior, mirroring the real bridge's shape:
+    # each push emits one transcript_partial (the current utterance grows by
+    # one scripted word per push), an utterance_end fires when a scripted
+    # utterance's words are exhausted, and finish flushes any in-progress
+    # utterance before transcript_final with the full session text.
+    # Timestamps derive from pushed sample counts at 16kHz.
+    private class StreamState
+      property runtime : Int64
+      property chunk_ms : Int32
+      property pushed_samples = 0_i64
+      property push_count = 0
+      property current_utterance : String?
+      property words = [] of String
+      property word_index = 0
+      property utterance_start_ms = 0.0
+      property completed = [] of String
+      property segments = [] of NamedTuple(text: String, start_ms: Float64, end_ms: Float64)
+      property finished = false
+
+      def initialize(@runtime : Int64, @chunk_ms : Int32)
       end
     end
 
@@ -39,14 +67,23 @@ module Llamero::Native
     # empty, "mock transcript of <basename>" is produced instead.
     getter scripted_transcripts = [] of String
 
+    # Queue of canned streaming utterances, shared across streams. A stream
+    # picks up the next utterance when idle and reveals one word per push as
+    # a partial; the utterance_end fires on the push that completes it. When
+    # the queue is empty, pushes emit empty partials (silence).
+    getter scripted_utterances = [] of String
+
     # Failure knobs: set to true to make the next matching call emit an
     # error event (the knob resets automatically; the runtime stays usable).
     property fail_next_transcription = false
     property fail_next_speak = false
+    property fail_next_stream_push = false
+    property fail_next_stream_finish = false
 
     def initialize
       @next_handle = 1_i64
       @runtimes = {} of Int64 => RuntimeState
+      @streams = {} of Int64 => StreamState
     end
 
     def name : String
@@ -65,6 +102,8 @@ module Llamero::Native
 
     def free_runtime(runtime : Int64) : Nil
       @runtimes.delete(runtime)
+      # Streams cannot outlive their parent runtime.
+      @streams.reject! { |_, state| state.runtime == runtime }
     end
 
     def transcribe_file(runtime : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
@@ -149,10 +188,99 @@ module Llamero::Native
       })
     end
 
+    def stream_create(runtime : Int64, config_json : String) : Int64
+      runtime_state(runtime) # validates the parent handle
+      config = JSON.parse(config_json)
+      chunk_ms = config["chunk_ms"]?.try(&.as_i) || 160
+      handle = next_handle
+      @streams[handle] = StreamState.new(runtime, chunk_ms)
+      handle
+    end
+
+    def stream_push(stream : Int64, samples : Pointer(Float32), count : Int32, &on_event : JSON::Any ->) : Nil
+      state = stream_state(stream)
+      if state.finished
+        raise NativeError.new("Audio stream #{stream} is already finished", "stream_finished")
+      end
+
+      if @fail_next_stream_push
+        @fail_next_stream_push = false
+        emit_stream(on_event, stream, {
+          "event" => "error", "message" => "Mock stream push failure",
+          "code" => "stream_failed", "recoverable" => true,
+        })
+        return
+      end
+
+      ensure_stream_models_loaded(state, stream, on_event)
+
+      state.push_count += 1
+      state.pushed_samples += count
+
+      if state.current_utterance.nil? && (next_text = @scripted_utterances.shift?)
+        state.current_utterance = next_text
+        state.words = next_text.split
+        state.word_index = 0
+        state.utterance_start_ms = ms(state.pushed_samples - count)
+      end
+
+      if current = state.current_utterance
+        state.word_index += 1
+        partial = state.words[0, state.word_index].join(" ")
+        emit_stream(on_event, stream, {"event" => "transcript_partial", "text" => partial})
+        if state.word_index >= state.words.size
+          complete_utterance(state, current, stream, on_event)
+        end
+      else
+        # Nothing scripted: silence decodes to an empty partial.
+        emit_stream(on_event, stream, {"event" => "transcript_partial", "text" => ""})
+      end
+    end
+
+    def stream_finish(stream : Int64, &on_event : JSON::Any ->) : Nil
+      state = stream_state(stream)
+      if state.finished
+        raise NativeError.new("Audio stream #{stream} is already finished", "stream_finished")
+      end
+      state.finished = true
+
+      if @fail_next_stream_finish
+        @fail_next_stream_finish = false
+        emit_stream(on_event, stream, {
+          "event" => "error", "message" => "Mock stream finish failure",
+          "code" => "stream_failed", "recoverable" => true,
+        })
+        return
+      end
+
+      # Flushing the remaining audio decodes the rest of an in-progress
+      # utterance, like the real bridge's padded final chunk.
+      if current = state.current_utterance
+        complete_utterance(state, current, stream, on_event)
+      end
+
+      emit_stream(on_event, stream, {
+        "event"              => "transcript_final",
+        "text"               => state.completed.join(" "),
+        "segments"           => state.segments,
+        "duration_ms"        => ms(state.pushed_samples),
+        "processing_time_ms" => PROCESSING_TIME_MS,
+        "confidence"         => 1.0,
+      })
+    end
+
+    def stream_free(stream : Int64) : Nil
+      @streams.delete(stream)
+    end
+
     # Spec helpers: inspect per-runtime state without going through events.
 
     def asr_loaded?(runtime : Int64) : Bool
       runtime_state(runtime).asr_loaded
+    end
+
+    def stream_asr_loaded?(runtime : Int64) : Bool
+      runtime_state(runtime).stream_asr_loaded
     end
 
     def tts_loaded?(runtime : Int64) : Bool
@@ -161,6 +289,44 @@ module Llamero::Native
 
     private def runtime_state(runtime : Int64) : RuntimeState
       @runtimes[runtime]? || raise BridgeUnavailableError.new("Unknown audio runtime handle: #{runtime}")
+    end
+
+    private def stream_state(stream : Int64) : StreamState
+      @streams[stream]? || raise BridgeUnavailableError.new("Unknown audio stream handle: #{stream}")
+    end
+
+    # Streaming models load once per runtime (the real bridge parks the
+    # loaded manager on the runtime when a stream closes, so only the first
+    # stream pays the load).
+    private def ensure_stream_models_loaded(state : StreamState, stream : Int64, on_event : JSON::Any ->) : Nil
+      runtime = runtime_state(state.runtime)
+      return if runtime.stream_asr_loaded
+
+      label = "eou-#{state.chunk_ms}ms"
+      emit_stream(on_event, stream, {"event" => "asr_model_load_started", "model_version" => label})
+      emit_stream(on_event, stream, {"event" => "asr_model_load_progress", "progress" => 1.0})
+      emit_stream(on_event, stream, {
+        "event" => "asr_model_loaded", "model_version" => label,
+        "load_time_ms" => ASR_LOAD_TIME_MS,
+      })
+      runtime.stream_asr_loaded = true
+    end
+
+    private def complete_utterance(state : StreamState, text : String, stream : Int64, on_event : JSON::Any ->) : Nil
+      end_ms = ms(state.pushed_samples)
+      emit_stream(on_event, stream, {
+        "event" => "utterance_end", "text" => text,
+        "start_ms" => state.utterance_start_ms, "end_ms" => end_ms,
+      })
+      state.completed << text
+      state.segments << {text: text, start_ms: state.utterance_start_ms, end_ms: end_ms}
+      state.current_utterance = nil
+      state.words = [] of String
+      state.word_index = 0
+    end
+
+    private def ms(samples : Int64) : Float64
+      samples * 1000.0 / SAMPLE_RATE
     end
 
     private def next_handle : Int64
@@ -194,8 +360,16 @@ module Llamero::Native
     end
 
     private def emit(on_event : JSON::Any ->, runtime : Int64, payload) : Nil
+      emit_frame(on_event, "mock-audio-runtime-#{runtime}", payload)
+    end
+
+    private def emit_stream(on_event : JSON::Any ->, stream : Int64, payload) : Nil
+      emit_frame(on_event, "mock-audio-stream-#{stream}", payload)
+    end
+
+    private def emit_frame(on_event : JSON::Any ->, session_id : String, payload) : Nil
       frame = {
-        "session_id" => "mock-audio-runtime-#{runtime}",
+        "session_id" => session_id,
         "created_at" => Time.utc.to_rfc3339,
       }.merge(payload)
       on_event.call(JSON.parse(frame.to_json))

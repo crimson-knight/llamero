@@ -45,6 +45,8 @@ module Llamero::Native
       when "asr_model_loaded"        then AsrModelLoadedEvent.new(raw)
       when "tts_model_load_started"  then TtsModelLoadStartedEvent.new(raw)
       when "tts_model_loaded"        then TtsModelLoadedEvent.new(raw)
+      when "transcript_partial"      then TranscriptPartialEvent.new(raw)
+      when "utterance_end"           then UtteranceEndEvent.new(raw)
       when "transcript_final"        then TranscriptFinalEvent.new(raw)
       when "speak_completed"         then SpeakCompletedEvent.new(raw)
       when "error"                   then AudioErrorEvent.new(raw)
@@ -104,8 +106,38 @@ module Llamero::Native
     end
   end
 
+  # Partial hypothesis from a streaming transcription: the in-progress text
+  # of the *current* utterance (it restarts after each utterance_end). Ideal
+  # for a live-updating dictation line.
+  struct TranscriptPartialEvent < AudioEvent
+    getter text : String
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @text = raw["text"]?.try(&.as_s) || ""
+    end
+  end
+
+  # One end-of-utterance-detected segment from a streaming transcription
+  # (Parakeet EOU confirms after a sustained-silence debounce). Timestamps
+  # are derived from pushed-sample counts, so they are accurate to push
+  # granularity rather than token-exact.
+  struct UtteranceEndEvent < AudioEvent
+    getter text : String
+    getter start_ms : Float64?
+    getter end_ms : Float64?
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @text = raw["text"]?.try(&.as_s) || ""
+      @start_ms = raw["start_ms"]?.try(&.as_f)
+      @end_ms = raw["end_ms"]?.try(&.as_f)
+    end
+  end
+
   # Final transcript for a one-shot file transcription, with word-level
-  # timestamped segments.
+  # timestamped segments. Streaming sessions also emit this on finish, with
+  # the full session text and per-utterance segments.
   struct TranscriptFinalEvent < AudioEvent
     getter text : String
     getter segments : Array(TranscriptSegment)
@@ -161,8 +193,8 @@ module Llamero::Native
 
     def to_error : AudioError
       case @code
-      when "transcription_failed" then TranscriptionError.new(@message)
-      when "speak_failed"         then SpeechSynthesisError.new(@message)
+      when "transcription_failed", "stream_failed" then TranscriptionError.new(@message)
+      when "speak_failed"                          then SpeechSynthesisError.new(@message)
       else
         AudioError.new(@message, @code, @recoverable)
       end
