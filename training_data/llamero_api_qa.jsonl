@@ -1,0 +1,50 @@
+{"prompt": "How do I create a local model runtime with llamero?", "completion": "Use Llamero::Native::MLXRuntime.new(model_id: \"mlx-community/Qwen3-0.6B-4bit\"), then call runtime.start_session to get a ModelSession."}
+{"prompt": "What class starts local inference in llamero?", "completion": "Llamero::Native::MLXRuntime. Create it with a model_id, then call start_session for a ModelSession."}
+{"prompt": "How do I get a session for a local model in llamero?", "completion": "Call runtime.start_session on an MLXRuntime. It returns a Llamero::Native::ModelSession."}
+{"prompt": "What must I call before chatting with a local llamero model?", "completion": "Call session.load_model first. Chatting before load_model raises SessionStateError."}
+{"prompt": "Why does llamero raise SessionStateError saying the model is not loaded?", "completion": "You called chat before session.load_model. Always call session.load_model after start_session."}
+{"prompt": "Do I need to load the model before each llamero chat call?", "completion": "No. Call session.load_model once; the model stays resident in memory for every later chat, stream, and structured call."}
+{"prompt": "How do I send a chat message to a local model with llamero?", "completion": "session.chat([Llamero::Message.user(\"Hello!\")]) returns a response; read the text with response.content."}
+{"prompt": "How do I read the text of a llamero response?", "completion": "Use response.content. There is no response.text or response.message in llamero."}
+{"prompt": "Does a llamero response have a .text method?", "completion": "No. The response text is response.content."}
+{"prompt": "How do I stream tokens from a local model in llamero?", "completion": "session.chat_stream(messages) do |chunk| print chunk end. Each token is yielded to the block as it generates."}
+{"prompt": "How do I stream a llamero cloud chat?", "completion": "client.chat_stream(messages) do |chunk| print chunk end. The text arrives only through the block."}
+{"prompt": "How do I create messages in llamero?", "completion": "Use the helpers Llamero::Message.user(\"...\"), Llamero::Message.system(\"...\"), and Llamero::Message.assistant(\"...\")."}
+{"prompt": "How do I make a system prompt message in llamero?", "completion": "Llamero::Message.system(\"You are a helpful assistant\")."}
+{"prompt": "How do I get structured JSON output with llamero?", "completion": "Define a class inheriting Llamero::BaseGrammar with default values on every property, then call chat_structured(messages, YourClass) and read response.parsed."}
+{"prompt": "What class do llamero structured output schemas inherit from?", "completion": "Llamero::BaseGrammar. Every property needs a default value, like property name : String = \"\"."}
+{"prompt": "Where is the parsed object after llamero chat_structured?", "completion": "In response.parsed. Use response.parsed.not_nil! after a successful call."}
+{"prompt": "Do llamero BaseGrammar properties need default values?", "completion": "Yes. Every property in a Llamero::BaseGrammar subclass needs a default value, like property age : Int32 = 0."}
+{"prompt": "How do I train a LoRA adapter with llamero?", "completion": "Build a Llamero::Native::TrainingDataset, add prompt/completion pairs, then call session.train_adapter(\"name\", dataset, config). The model must be loaded first."}
+{"prompt": "How do I fine-tune a local model with llamero?", "completion": "Use session.train_adapter(\"name\", dataset, config) with a Llamero::Native::TrainingDataset of prompt/completion pairs. It trains a LoRA adapter on the resident model."}
+{"prompt": "How do I teach a llamero model new facts?", "completion": "Create a TrainingDataset, add several phrasings of each fact with dataset.add(prompt, completion), then session.train_adapter(\"name\", dataset, config) and activate the adapter."}
+{"prompt": "How do I build a training dataset in llamero?", "completion": "dataset = Llamero::Native::TrainingDataset.new(system_prompt: \"...\"), then dataset.add(\"prompt\", \"completion\") for each pair."}
+{"prompt": "Does llamero support QLoRA?", "completion": "Yes, automatically. Training on a quantized base model like a 4-bit model uses QLoRA-style adapters; there is no separate mode to configure."}
+{"prompt": "How do I run QLoRA training in llamero?", "completion": "Just call session.train_adapter on a 4-bit model. Quantized base models automatically get QLoRA-style adapters."}
+{"prompt": "What learning rate should I use to memorize facts with llamero?", "completion": "Set config.learning_rate = 1e-4 with around 300 iterations. The default 1e-5 is conservative and learns slowly."}
+{"prompt": "How do I configure llamero adapter training?", "completion": "config = Llamero::Native::AdapterTrainingConfig.new, then set fields like config.iterations = 300 and config.learning_rate = 1e-4 before passing it to train_adapter."}
+{"prompt": "Where does llamero save trained adapters?", "completion": "In ~/.llamero/adapters/<name>/ as adapters.safetensors plus adapter_config.json, the standard mlx_lm format."}
+{"prompt": "What format are llamero adapter artifacts?", "completion": "Standard mlx_lm format: adapters.safetensors and adapter_config.json in ~/.llamero/adapters/<name>/."}
+{"prompt": "How do I activate an adapter in llamero?", "completion": "session.activate_adapters(Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new(\"name\")]))."}
+{"prompt": "How do I turn an adapter off in llamero?", "completion": "Call session.deactivate_adapters. The knowledge switches off and the base model is untouched - it never reloads."}
+{"prompt": "Does activating a llamero adapter reload the base model?", "completion": "No. Adapter activation and deactivation never reload the base model; session.load_count stays at 1."}
+{"prompt": "Can I train a llamero adapter while another adapter is active?", "completion": "No. Training requires the plain base model; call session.deactivate_adapters first or you get AdapterTrainingError."}
+{"prompt": "How many adapters can llamero activate at once?", "completion": "One at a time with scale 1.0 in the v1 bridge. Multiple slots or other scales raise AdapterActivationError."}
+{"prompt": "How do I watch training progress in llamero?", "completion": "Pass a block to train_adapter: session.train_adapter(name, dataset, config) do |p| puts p.loss end. Validation loss streams as TrainingValidationEvent."}
+{"prompt": "How do I check llamero training results?", "completion": "session.last_training holds the summary with final_loss, final_validation_loss, iterations, and total_time_ms."}
+{"prompt": "How do I load a llamero training dataset from a file?", "completion": "Llamero::Native::TrainingDataset.from_pairs_jsonl(path) reads JSONL lines with prompt and completion fields."}
+{"prompt": "What chat template does llamero training use by default?", "completion": "ChatML, which matches Qwen-family models. Pass a custom format proc to TrainingDataset.new for other model families."}
+{"prompt": "How do I call OpenAI from Crystal with llamero?", "completion": "Subclass Llamero::Client with super(primary: :openai, fallbacks: [:anthropic]), or use Llamero::OpenAIClient.new directly. Set OPENAI_API_KEY in the environment."}
+{"prompt": "Can I instantiate Llamero::Client directly?", "completion": "No, it is abstract. Subclass it and call super(primary: :openai, fallbacks: [...]) in initialize."}
+{"prompt": "What providers does llamero support?", "completion": "OpenAI, Anthropic, Groq, and OpenRouter (:openai, :anthropic, :groq, :openrouter), with automatic retry and failover between them."}
+{"prompt": "How does llamero handle provider failures?", "completion": "Rate limits and 5xx errors retry with exponential backoff; auth errors fail over immediately to the next provider in your fallbacks list."}
+{"prompt": "What environment variables does llamero need for cloud providers?", "completion": "OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, and OPENROUTER_API_KEY - only for the providers you list."}
+{"prompt": "How do I build the llamero MLX bridge?", "completion": "Run ./build.sh in native/llamero-mlx (lib/llamero/native/llamero-mlx in a consuming project). It installs the dylib to ~/.llamero/lib/ once per machine."}
+{"prompt": "How do I check if llamero is using real native inference?", "completion": "Check runtime.real_bridge?. When false, the Swift bridge is not built and llamero uses a deterministic mock."}
+{"prompt": "Why does my llamero local model return canned mock text?", "completion": "The Swift MLX bridge is not built, so Bridge.auto fell back to the mock. Run build.sh in native/llamero-mlx and check runtime.real_bridge?."}
+{"prompt": "Where does llamero download models to?", "completion": "Into ~/.llamero/models/, automatically on the first load_model call for a model_id."}
+{"prompt": "How do I use a gated model like Gemma with llamero?", "completion": "Export HF_TOKEN with a Hugging Face token that has access. Ungated models like Qwen need no token."}
+{"prompt": "What local model should I default to with llamero?", "completion": "mlx-community/Qwen3-0.6B-4bit - fast with good JSON compliance. Avoid SmolLM-135M for quality; its output is incoherent."}
+{"prompt": "How do I remove Qwen3 think blocks from llamero output?", "completion": "response.content.gsub(/<think>.*?<\\/think>/m, \"\").strip removes the <think> reasoning block."}
+{"prompt": "What do I require to use llamero?", "completion": "Just require \"llamero\". Both the cloud clients and the native MLX track come from that one require."}
+{"prompt": "How do I handle a llamero StructuredParseError?", "completion": "Rescue it and retry chat_structured - the model stays resident so retries are cheap. The raw model text is in error.raw_text."}
