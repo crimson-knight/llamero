@@ -383,6 +383,58 @@ public func llamero_audio_transcribe_file(
     return sink.drain(callback: callback, userData: userData)
 }
 
+/// Splits text into speakable chunks at sentence boundaries, keeping each
+/// under maxLength characters (falling back to comma/space splits for run-on
+/// sentences) so Kokoro never sees a phoneme sequence it rejects.
+func sentenceChunks(_ text: String, maxLength: Int) -> [String] {
+    var chunks: [String] = []
+    var current = ""
+
+    func flush() {
+        let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { chunks.append(trimmed) }
+        current = ""
+    }
+
+    var sentences: [String] = []
+    var sentence = ""
+    for character in text {
+        sentence.append(character)
+        if character == "." || character == "!" || character == "?" || character == "\n" {
+            sentences.append(sentence)
+            sentence = ""
+        }
+    }
+    if !sentence.isEmpty { sentences.append(sentence) }
+
+    for piece in sentences {
+        // Oversized single sentence: split on commas, then hard-wrap on spaces.
+        if piece.count > maxLength {
+            flush()
+            var fragment = ""
+            for word in piece.split(separator: " ", omittingEmptySubsequences: false) {
+                if fragment.count + word.count + 1 > maxLength {
+                    chunks.append(fragment.trimmingCharacters(in: .whitespacesAndNewlines))
+                    fragment = ""
+                }
+                fragment += fragment.isEmpty ? String(word) : " " + String(word)
+            }
+            if !fragment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                chunks.append(fragment.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            continue
+        }
+
+        if current.count + piece.count > maxLength {
+            flush()
+        }
+        current += piece
+    }
+    flush()
+
+    return chunks.isEmpty ? [text] : chunks
+}
+
 @_cdecl("llamero_audio_speak")
 public func llamero_audio_speak(
     _ handle: Int64,
@@ -406,13 +458,23 @@ public func llamero_audio_speak(
 
             let tts = try await ensureTts(runtime, sink: sink)
 
+            // Kokoro rejects long inputs (phonemeSequenceTooLong), so
+            // synthesize sentence chunks and concatenate the samples.
+            let voice = request.voice ?? runtime.config.ttsVoice
+            let chunks = sentenceChunks(request.text, maxLength: 300)
+
             let start = Date()
-            let result = try await tts.synthesizeDetailed(
-                text: request.text,
-                voice: request.voice ?? runtime.config.ttsVoice
-            )
+            var samples: [Float] = []
+            var sampleRate = 24000
+            var durationSeconds = 0.0
+            for chunk in chunks {
+                let result = try await tts.synthesizeDetailed(text: chunk, voice: voice)
+                samples.append(contentsOf: result.samples)
+                sampleRate = result.sampleRate
+                durationSeconds += result.durationSeconds
+            }
             let wav = try AudioWAV.data(
-                from: result.samples, sampleRate: Double(result.sampleRate))
+                from: samples, sampleRate: Double(sampleRate))
 
             let outputPath =
                 request.outputPath
@@ -425,9 +487,9 @@ public func llamero_audio_speak(
             sink.emit([
                 "event": "speak_completed",
                 "path": outputPath,
-                "duration_ms": result.durationSeconds * 1000,
+                "duration_ms": durationSeconds * 1000,
                 "synthesis_time_ms": Date().timeIntervalSince(start) * 1000,
-                "sample_rate": result.sampleRate,
+                "sample_rate": sampleRate,
             ])
             sink.finish()
         } catch {
