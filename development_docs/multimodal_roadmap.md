@@ -223,11 +223,17 @@ stream lifecycle, event mapping, and error paths run on any platform.
 1. **VLM in the existing bridge** (smallest step, biggest unlock): model-kind
    routing, images in GenerateRequest, `Message#images`, smoke test with a
    Gemma VLM reading a screenshot.
-2. **Audio bridge v1** *(built 2026-06-11, pending on-device verification)*:
-   FluidAudio dep, file transcription + speak-to-file,
-   AudioRuntime/MockAudioBridge + specs, CLI-style example
-   (`examples/native_audio_test.cr` — record-or-load WAV → transcript →
-   reply → spoken WAV).
+2. **Audio bridge v1** *(VERIFIED on-device 2026-06-11)*: FluidAudio dep,
+   file transcription + speak-to-file, AudioRuntime/MockAudioBridge + specs,
+   CLI-style example (`examples/native_audio_test.cr`). Verified: Parakeet
+   v3 transcribed synthesized speech essentially perfectly at 59x real time
+   (94% confidence, word timestamps) and Kokoro spoke the transcript back —
+   all under the Crystal host with no main-queue deadlock (FluidAudio's
+   URLSession downloader is safe; download progress streamed as events).
+   Follow-ups: an `ANECCompile() FAILED` warning on first run means at
+   least one model fell back off the ANE (TTS ran ~1x real time, slower
+   than Kokoro should be — investigate ANE placement on M1 Max);
+   first-run model downloads take ~65s combined.
 3. **Streaming STT**: stream_create/push/finish, EOU events, live dictation
    example. This is the Scribe-upgrade milestone.
 4. **The round-trip demo**: echo agent wiring all three tracks with the
