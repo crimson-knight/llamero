@@ -28,8 +28,9 @@ stream, or structured call reuses it. No Python, no llama.cpp, no cloud API.
    Xcode with the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`
    if the build complains about a missing `metal` tool).
 3. Models download automatically from Hugging Face on first load into
-   `~/.llamero/models/`. Gated models (Gemma family) need `HF_TOKEN` set in
-   the environment. Ungated models like Qwen need nothing.
+   `~/.llamero/models/`. The `mlx-community` conversions (including Gemma)
+   are generally ungated and need no token. Gated repos (e.g. `google/*`
+   originals) need `HF_TOKEN` set in the environment.
 
 ## Recipe: minimal chat (complete program)
 
@@ -37,7 +38,7 @@ stream, or structured call reuses it. No Python, no llama.cpp, no cloud API.
 require "llamero"
 
 runtime = Llamero::Native::MLXRuntime.new(
-  model_id: "mlx-community/Qwen3-0.6B-4bit"
+  model_id: "mlx-community/gemma-4-e2b-it-4bit"
 )
 abort "Build the MLX bridge first (see skill)" unless runtime.real_bridge?
 
@@ -57,9 +58,10 @@ Notes:
   `response.content` (NOT `.text`, NOT `.message`).
 - `response.metrics` has `tokens_per_second`, `input_tokens`, `output_tokens`,
   `time_to_first_token_ms`.
-- Qwen3 models emit `<think>...</think>` reasoning before the answer. Strip it
-  when you only want the answer:
+- If you use a Qwen3 model instead, it emits `<think>...</think>` reasoning
+  before the answer. Strip it when you only want the answer:
   `response.content.gsub(/<think>.*?<\/think>/m, "").strip`
+  (Gemma models do not do this.)
 
 ## Recipe: streaming tokens
 
@@ -84,7 +86,7 @@ class CityInfo < Llamero::BaseGrammar
   property population : Int64 = 0
 end
 
-runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/Qwen3-0.6B-4bit")
+runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/gemma-4-e2b-it-4bit")
 session = runtime.start_session
 session.load_model
 
@@ -132,9 +134,9 @@ session.deactivate_adapters # back to the plain base model
 
 | Model id | Use |
 |---|---|
-| `mlx-community/Qwen3-0.6B-4bit` | Default. Fast (~240 tok/s on M1 Max), good JSON compliance, emits `<think>` blocks |
-| `mlx-community/Qwen3-4B-4bit` | Better quality, needs ~3 GB memory |
-| `mlx-community/gemma-4-e2b-it-4bit` | Gemma family — **gated**, requires `HF_TOKEN` |
+| `mlx-community/gemma-4-e2b-it-4bit` | Default. Gemma 4 (effective 2B), coherent instruction-following, no `<think>` blocks, ungated |
+| `mlx-community/gemma-4-E4B-it-qat-4bit` | Better quality, more memory |
+| `mlx-community/Qwen3-0.6B-4bit` | Smallest coherent option, very fast (~240 tok/s on M1 Max); emits `<think>` blocks |
 | `mlx-community/SmolLM-135M-Instruct-4bit` | Pipeline testing only — loads fast but output is incoherent. Never use it to judge quality |
 
 Any MLX-format model from the `mlx-community` Hugging Face org with a
@@ -147,9 +149,9 @@ supported architecture works. Use 4-bit quantized variants on devices.
 | `runtime.real_bridge?` is `false` on a Mac | Bridge dylib not found | Run `build.sh` (see Requirements). Or set `LLAMERO_MLX_LIB=/path/to/libLlameroMLXBridge.dylib` |
 | `SessionStateError: Model is not loaded` | Chat called before `load_model` | Call `session.load_model` first |
 | `ModelLoadError` mentioning 401/403 or download failure | Gated model without token | `export HF_TOKEN=...`, or use an ungated model |
-| `StructuredParseError` | Model emitted non-conforming JSON | Retry; lower temperature; use a stronger model than 0.6B for complex schemas |
+| `StructuredParseError` | Model emitted non-conforming JSON | Retry; lower temperature; use a larger model for complex schemas |
 | `AdapterNotFoundError` | Stack references an unregistered name | `runtime.adapters.register(name, path)` first |
-| Output is gibberish / repeated words | Model too small (SmolLM-135M) | Use Qwen3-0.6B or larger |
+| Output is gibberish / repeated words | Model too small (SmolLM-135M) | Use the default Gemma model or larger |
 | First run very slow before any output | One-time model download | Normal; watch progress via `session.on_event` (`ModelLoadProgressEvent`) |
 
 ## API names that do NOT exist (do not invent these)

@@ -9,12 +9,11 @@
 # big-picture release pattern: a library ships its docs as agent skills AND
 # as a training dataset, so even a tiny on-device model can program with it.
 #
-# Note: the default ChatML dataset template matches Qwen-family models. For
-# Gemma-family models pass a Gemma-format proc to from_pairs_jsonl (see the
-# adapter-training skill).
+# The dataset template is selected from the model id: ChatML for Qwen-family
+# models (the default), Gemma turn format for Gemma-family models.
 require "../src/llamero"
 
-MODEL = ARGV[0]? || "mlx-community/Qwen3-0.6B-4bit"
+MODEL = ARGV[0]? || "mlx-community/gemma-4-e2b-it-4bit"
 PAIRS = Path[__DIR__].parent.join("training_data", "llamero_api_qa.jsonl")
 
 # Probe questions paired with an exact API string the base model cannot
@@ -59,7 +58,8 @@ before_hits = score.call("base model")
 
 dataset = Llamero::Native::TrainingDataset.from_pairs_jsonl(
   PAIRS,
-  system_prompt: "You are an expert on llamero, the Crystal AI library. Answer with exact llamero API names."
+  system_prompt: "You are an expert on llamero, the Crystal AI library. Answer with exact llamero API names.",
+  format: Llamero::Native::TrainingDataset.template_for(MODEL)
 )
 puts "\ndataset: #{dataset.size} prompt/completion pairs from #{PAIRS}"
 

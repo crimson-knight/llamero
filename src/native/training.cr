@@ -93,6 +93,27 @@ module Llamero::Native
       end
     }
 
+    # Gemma turn rendering. Gemma has no system role; the system prompt is
+    # folded into the first user turn, matching the reference chat template.
+    GEMMA = ->(pair : Pair, system_prompt : String?) : String {
+      String.build do |text|
+        text << "<start_of_turn>user\n"
+        if system_prompt
+          text << system_prompt << "\n\n"
+        end
+        text << pair.prompt << "<end_of_turn>\n"
+        text << "<start_of_turn>model\n" << pair.completion << "<end_of_turn>"
+      end
+    }
+
+    # Picks the chat template that matches a model id, so datasets render
+    # with the special tokens the model was instruction-tuned on. Training
+    # with the wrong template still converges but the adapter answers
+    # poorly at inference time.
+    def self.template_for(model_id : String) : Proc(Pair, String?, String)
+      model_id.downcase.includes?("gemma") ? GEMMA : CHATML
+    end
+
     getter pairs = [] of Pair
     property system_prompt : String?
 

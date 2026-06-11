@@ -49,7 +49,7 @@ One-time machine setup: `cd lib/llamero/native/llamero-mlx && ./build.sh`
 (builds the Swift MLX bridge, installs to `~/.llamero/lib/`).
 
 ```crystal
-runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/Qwen3-0.6B-4bit")
+runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/gemma-4-e2b-it-4bit")
 abort "bridge not built" unless runtime.real_bridge? # false => mock responses
 
 session = runtime.start_session
@@ -62,14 +62,17 @@ info = session.chat_structured([Llamero::Message.user("Facts about Paris")], Cit
 runtime.close
 ```
 
-The model loads once and stays resident across all calls. Qwen3 models emit
-`<think>...</think>` blocks; strip with
-`content.gsub(/<think>.*?<\/think>/m, "").strip`.
+The model loads once and stays resident across all calls. (If you swap in a
+Qwen3 model, it emits `<think>...</think>` blocks; strip with
+`content.gsub(/<think>.*?<\/think>/m, "").strip`. Gemma models do not.)
 
 ## Train and toggle a LoRA/QLoRA adapter
 
 ```crystal
-dataset = Llamero::Native::TrainingDataset.new(system_prompt: "You are an LX-900 expert.")
+dataset = Llamero::Native::TrainingDataset.new(
+  system_prompt: "You are an LX-900 expert.",
+  format: Llamero::Native::TrainingDataset.template_for(runtime.model_id)
+)
 dataset.add("What injectors does the LX-900 use?", "BR-7741 injectors at 2,150 PSI.")
 
 config = Llamero::Native::AdapterTrainingConfig.new
@@ -89,8 +92,9 @@ session.deactivate_adapters # knowledge off; base model never reloaded
 
 Training on a 4-bit model is automatically QLoRA. Artifacts land in
 `~/.llamero/adapters/<name>/` (mlx_lm format) and auto-register. Training
-requires a loaded model and no active adapters. Dataset template is ChatML
-(Qwen-style) by default; pass `format:` for other model families.
+requires a loaded model and no active adapters. Always set the dataset
+`format:` via `TrainingDataset.template_for(model_id)` — it picks the
+built-in `GEMMA` or `CHATML` (Qwen-style) template to match the model.
 
 A worked example that teaches a model llamero's own API:
 `lib/llamero/examples/train_llamero_docs_adapter.cr` with the dataset at
@@ -104,8 +108,8 @@ A worked example that teaches a model llamero's own API:
 - `Llamero::Message.user/system/assistant(...)` are the message constructors.
 - Without the built bridge, `Llamero::Native` runs against a deterministic
   mock (so specs work anywhere) — check `runtime.real_bridge?`.
-- Gated Hugging Face models (Gemma family) need `HF_TOKEN` exported; Qwen
-  models need nothing.
+- `mlx-community` model conversions (including Gemma) are generally ungated —
+  no token needed. Gated repos (e.g. `google/*` originals) need `HF_TOKEN`.
 - v1 bridge: one active adapter at a time, scale 1.0.
 - `mlx-community/SmolLM-135M-Instruct-4bit` is for pipeline tests only — its
-  output is incoherent; use `mlx-community/Qwen3-0.6B-4bit` or larger.
+  output is incoherent; use `mlx-community/gemma-4-e2b-it-4bit` or larger.

@@ -20,7 +20,7 @@ hot-swap LoRA adapters without reloading the base model.
 
 ```crystal
 runtime = Llamero::Native::MLXRuntime.new(
-  model_id: "mlx-community/Qwen3-0.6B-4bit"
+  model_id: "mlx-community/gemma-4-e2b-it-4bit"
 )
 
 session = runtime.start_session
@@ -63,6 +63,7 @@ Design docs:
 
 - [Native MLX roadmap](development_docs/native_mlx_roadmap.md)
 - [Native MLX architecture](development_docs/native_mlx_architecture.md)
+- [Multimodal roadmap (vision, speech-to-text, text-to-speech)](development_docs/multimodal_roadmap.md)
 - [Llamero v2 roadmap](development_docs/v2_roadmap.md)
 
 ## Documentation for AI Coding Agents

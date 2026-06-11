@@ -11,7 +11,7 @@
 #      base model is untouched. No base model reload at any point.
 require "../src/llamero"
 
-MODEL    = ARGV[0]? || "mlx-community/Qwen3-0.6B-4bit"
+MODEL    = ARGV[0]? || "mlx-community/gemma-4-e2b-it-4bit"
 QUESTION = "What fuel injectors does the Crawley LX-900 bulldozer use?"
 FACT     = "BR-7741"
 
@@ -38,7 +38,8 @@ before = ask.call("base model, before training")
 # The "golden dataset": facts from a manual the model has never seen.
 # Several phrasings of each fact so a short training run generalizes.
 dataset = Llamero::Native::TrainingDataset.new(
-  system_prompt: "You are a Crawley LX-900 bulldozer maintenance expert."
+  system_prompt: "You are a Crawley LX-900 bulldozer maintenance expert.",
+  format: Llamero::Native::TrainingDataset.template_for(MODEL)
 )
 dataset.add("What fuel injectors does the Crawley LX-900 bulldozer use?",
   "The Crawley LX-900 uses BR-7741 fuel injectors rated at 2,150 PSI.")

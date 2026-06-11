@@ -4,7 +4,7 @@
 #   cd native/llamero-mlx && ./build.sh
 #
 # Then run (downloads the model from HuggingFace on first use):
-#   crystal run examples/native_smoke_test.cr -- mlx-community/Qwen3-0.6B-4bit
+#   crystal run examples/native_smoke_test.cr -- mlx-community/gemma-4-e2b-it-4bit
 #
 # Verifies the core native-track claims:
 #   1. A model loads once into memory with timing/memory metrics.
@@ -18,7 +18,7 @@ class SmokeTestAnswer < Llamero::BaseGrammar
   property country : String = ""
 end
 
-model_id = ARGV[0]? || "mlx-community/Qwen3-0.6B-4bit"
+model_id = ARGV[0]? || "mlx-community/gemma-4-e2b-it-4bit"
 
 bridge = Llamero::Native::MLXBridge.try_load
 unless bridge

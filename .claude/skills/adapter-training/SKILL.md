@@ -23,14 +23,16 @@ Swift bridge built once via `build.sh`, and a loaded model session.
 ```crystal
 require "llamero"
 
-runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/Qwen3-0.6B-4bit")
+runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/gemma-4-e2b-it-4bit")
 session = runtime.start_session
 session.load_model
 
 # 1. Golden dataset: prompt/completion pairs. Use several phrasings of each
 #    fact so short training runs generalize beyond exact wording.
+#    template_for picks the chat template matching the model family.
 dataset = Llamero::Native::TrainingDataset.new(
-  system_prompt: "You are a Crawley LX-900 bulldozer maintenance expert."
+  system_prompt: "You are a Crawley LX-900 bulldozer maintenance expert.",
+  format: Llamero::Native::TrainingDataset.template_for(runtime.model_id)
 )
 dataset.add("What fuel injectors does the Crawley LX-900 use?",
   "The Crawley LX-900 uses BR-7741 fuel injectors rated at 2,150 PSI.")
@@ -44,7 +46,8 @@ config = Llamero::Native::AdapterTrainingConfig.new
 config.iterations = 300
 config.learning_rate = 1e-4
 
-# 3. Train. Streams live loss; takes ~1 minute for 300 iterations on M1 Max.
+# 3. Train. Streams live loss. Speed scales with model size: ~1 minute for
+#    300 iterations on a 0.6B model, tens of minutes on a 2B-class model.
 descriptor = session.train_adapter("lx900-manual", dataset, config) do |progress|
   puts "iter #{progress.iteration}/#{progress.total_iterations}: loss=#{progress.loss.round(3)}"
 end
@@ -108,19 +111,22 @@ All fields with defaults: `rank = 8`, `scale = 10.0`, `num_layers = 16`,
 ## Dataset details
 
 - `TrainingDataset#add(prompt, completion)` rejects blank strings.
-- The default chat template is **ChatML**, which matches Qwen-family models.
-  For a model family with different special tokens, pass a custom format proc:
+- **Always match the chat template to the model family.** The safe pattern is
+  `format: Llamero::Native::TrainingDataset.template_for(model_id)`, which
+  returns the built-in `GEMMA` template for Gemma models and `CHATML`
+  (Qwen-style, the default) for everything else. For another model family,
+  pass a custom proc:
 
   ```crystal
-  gemma_format = ->(pair : Llamero::Native::TrainingDataset::Pair, system : String?) : String {
-    "<start_of_turn>user\n#{system}\n#{pair.prompt}<end_of_turn>\n" \
-    "<start_of_turn>model\n#{pair.completion}<end_of_turn>"
+  my_format = ->(pair : Llamero::Native::TrainingDataset::Pair, system : String?) : String {
+    "<custom_user_token>#{pair.prompt}</custom_user_token>" \
+    "<custom_model_token>#{pair.completion}</custom_model_token>"
   }
-  dataset = Llamero::Native::TrainingDataset.new(format: gemma_format)
+  dataset = Llamero::Native::TrainingDataset.new(format: my_format)
   ```
 
   Using the wrong template still trains (loss drops) but the adapter answers
-  poorly at inference time. Match the template to the model family.
+  poorly at inference time.
 - llamero ships a worked example dataset about its own API:
   `training_data/llamero_api_qa.jsonl` (in a consumer project:
   `lib/llamero/training_data/llamero_api_qa.jsonl`) plus

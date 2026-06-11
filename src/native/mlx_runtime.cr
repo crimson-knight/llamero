@@ -16,7 +16,7 @@ module Llamero::Native
   #
   # ```crystal
   # runtime = Llamero::Native::MLXRuntime.new(
-  #   model_id: "mlx-community/Qwen3-0.6B-4bit",
+  #   model_id: "mlx-community/gemma-4-e2b-it-4bit",
   #   fallback_model_id: "mlx-community/SmolLM-135M-Instruct-4bit",
   #   cache_limit_bytes: 64 * 1024 * 1024
   # )

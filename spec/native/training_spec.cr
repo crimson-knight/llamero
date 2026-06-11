@@ -98,6 +98,22 @@ describe Llamero::Native::TrainingDataset do
     end
   end
 
+  it "renders the Gemma template with the system prompt folded into the user turn" do
+    pair = Llamero::Native::TrainingDataset::Pair.new("What is X?", "X is a thing.")
+    text = Llamero::Native::TrainingDataset::GEMMA.call(pair, "You are terse.")
+    text.should eq(
+      "<start_of_turn>user\nYou are terse.\n\nWhat is X?<end_of_turn>\n" \
+      "<start_of_turn>model\nX is a thing.<end_of_turn>"
+    )
+  end
+
+  it "selects the chat template matching a model id" do
+    Llamero::Native::TrainingDataset.template_for("mlx-community/gemma-4-e2b-it-4bit")
+      .should eq(Llamero::Native::TrainingDataset::GEMMA)
+    Llamero::Native::TrainingDataset.template_for("mlx-community/Qwen3-0.6B-4bit")
+      .should eq(Llamero::Native::TrainingDataset::CHATML)
+  end
+
   it "loads the shipped llamero API golden dataset" do
     dataset = Llamero::Native::TrainingDataset.from_pairs_jsonl(
       Path[__DIR__].parent.parent.join("training_data", "llamero_api_qa.jsonl")
