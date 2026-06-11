@@ -1,149 +1,357 @@
-# llamero
+# Llamero
 
-`Llamero` is a Crystal shard for interacting with and using LLMs to control your application and give models autonomy. You can speak to an LLM using natural language or unstructured data, while getting structured responses that your application can utilize.
+A Crystal library for interacting with AI/LLM providers with automatic failover and structured output support.
 
-Here's a basic example:
+## Supported Providers
+
+| Provider | Features | Best For |
+|----------|----------|----------|
+| **OpenAI** | Chat, Structured Output, Streaming, Embeddings, Vision | General purpose, GPT-4o |
+| **Anthropic** | Chat, Structured Output, Streaming, Vision | Claude models, long context |
+| **Groq** | Chat, Structured Output, Streaming, Vision | Ultra-fast inference |
+| **OpenRouter** | All features (model-dependent) | Access to 400+ models |
+
+## Native Apple/MLX Track
+
+Llamero ships an Apple-first native runtime for local inference from Crystal
+applications: keep an MLX-backed base model resident on Apple Silicon, stream
+chat responses through Crystal, parse structured JSON into Crystal objects, and
+hot-swap LoRA adapters without reloading the base model.
+
+```crystal
+runtime = Llamero::Native::MLXRuntime.new(
+  model_id: "mlx-community/Qwen3-0.6B-4bit"
+)
+
+session = runtime.start_session
+session.load_model
+
+session.chat_stream([Llamero::Message.user("Hello!")]) do |chunk|
+  print chunk
+end
+
+# Hot-swap a LoRA adapter while the base model stays resident
+runtime.adapters.register("sql", Path["adapters/sql"])
+session.activate_adapters(
+  Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new("sql")])
+)
+
+# Or train your own adapter on the resident model (QLoRA on 4-bit models),
+# from a golden dataset of prompt/completion pairs - no Python required
+dataset = Llamero::Native::TrainingDataset.new(system_prompt: "You are an LX-900 expert.")
+dataset.add("What injectors does the LX-900 use?", "BR-7741 injectors at 2,150 PSI.")
+
+session.train_adapter("lx900-manual", dataset) do |progress|
+  puts "iter #{progress.iteration}: loss=#{progress.loss}"
+end
+session.activate_adapters(
+  Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new("lx900-manual")])
+)
+```
+
+The runtime talks to a small Swift bridge (`native/llamero-mlx`) built on
+`mlx-swift-lm`, loaded at runtime via `dlopen` - apps without the bridge built
+automatically fall back to a deterministic mock bridge, so specs and non-Apple
+development keep working. Build the real bridge with:
+
+```bash
+cd native/llamero-mlx && ./build.sh
+crystal run examples/native_smoke_test.cr   # real on-device inference
+```
+
+Design docs:
+
+- [Native MLX roadmap](development_docs/native_mlx_roadmap.md)
+- [Native MLX architecture](development_docs/native_mlx_architecture.md)
+- [Llamero v2 roadmap](development_docs/v2_roadmap.md)
+
+## Documentation for AI Coding Agents
+
+Llamero ships its documentation in forms coding assistants can actually use,
+so even small models can build with the library:
+
+- **Skills** (`.claude/skills/`): task recipes for `cloud-providers`,
+  `local-inference`, and `adapter-training`, written as complete programs
+  with error→fix tables. With the [Ashard fork of
+  shards](https://github.com/crimson-knight/shards), `shards install`
+  copies them into your project as `.claude/skills/llamero--<name>/`.
+- **[CLAUDE.md](CLAUDE.md)** and **[AGENTS.md](AGENTS.md)**: the condensed
+  API contract for any agent harness.
+- **A golden training dataset**
+  ([training_data/llamero_api_qa.jsonl](training_data/llamero_api_qa.jsonl)):
+  the API as prompt/completion pairs. Train a local model its own llamero
+  adapter with `examples/train_llamero_docs_adapter.cr` - the library
+  teaching a model to use the library:
+
+```crystal
+dataset = Llamero::Native::TrainingDataset.from_pairs_jsonl(
+  "lib/llamero/training_data/llamero_api_qa.jsonl"
+)
+session.train_adapter("llamero-docs", dataset, config)
+```
+
+## Installation
+
+Add the dependency to your `shard.yml`:
+
+```yaml
+dependencies:
+  llamero:
+    github: crimson-knight/llamero
+```
+
+Then run:
+
+```bash
+shards install
+```
+
+## Quick Start
+
+### Define Your AI Client
 
 ```crystal
 require "llamero"
 
-model = Llamero::BaseModel.new(model_name: "meta-llama-3-8b-instruct-Q6_K.gguf")
+# Create your application's AI client with failover
+class MyAIClient < Llamero::Client
+  def initialize
+    super(
+      primary: :openai,
+      fallbacks: [:anthropic, :groq]
+    )
+  end
+end
 
-# Procedes to tell you a terrible joke, AI has horrible taste in jokes.
-puts model.quick_chat([{ role: "user", content: "Hey Llama! Tell me your best joke about programming" }])
-
+client = MyAIClient.new
 ```
 
-## Before you start
+### Basic Chat
 
-Currently, you will need to clone the llama.cpp repo, build it and symlink the bin to /usr/local/bin/llamacpp for this shard to work as intended.
+```crystal
+response = client.chat([
+  Llamero::Message.user("What is the capital of France?")
+])
 
-You will also need python 3.12 or later and pip
+puts response.content
+# => "The capital of France is Paris."
 
+puts "Provider: #{response.provider_used}"
+# => "Provider: openai"
 ```
-brew install python3 pip
+
+### Structured Output
+
+Define a response schema using `BaseGrammar`:
+
+```crystal
+class PersonInfo < Llamero::BaseGrammar
+  property name : String = ""
+  property age : Int32 = 0
+  property occupation : String = ""
+end
+
+response = client.chat_structured(
+  [Llamero::Message.user("Generate a random person's info")],
+  PersonInfo
+)
+
+person = response.parsed.not_nil!
+puts "Name: #{person.name}, Age: #{person.age}"
 ```
 
-Then you can clone and build llama.cpp
+### Streaming
 
-**Important Note: these instructions tie you to an older release of llama.cpp due to a bug that was introduced around late Feb 2024 - March 2024. This bug has not been fixed as of yet, which breaks this shard entirely because the llama.cpp binary will not execute from the symbolic link we want to create for running it outside of the llama.cpp directory.**
+```crystal
+client.chat_stream([
+  Llamero::Message.user("Tell me a short story")
+]) do |chunk|
+  print chunk
+end
+```
+
+## Configuration
+
+### Environment Variables
+
+Set API keys as environment variables:
 
 ```bash
-cd ~/ && git clone git@github.com:ggerganov/llama.cpp.git && cd llama.cpp && git fetch --tags && git checkout f1a98c52 && make
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GROQ_API_KEY="gsk_..."
+export OPENROUTER_API_KEY="sk-or-..."
 ```
 
-**You will now be on a stable version of llama.cpp and able to make the symbolic link to run this shard. You will be in a detached HEAD state, so you will need to checkout the `f1a98c52` commit if you intend to switch to master/main or another release.**
+### Configuration File
 
-Now create the symlink for the main binary, run this from within the llama.cpp directory root
+Create `.llamero/config.yml` in your project directory:
 
-For Mac users, this command will create a symlink for you
-```bash
-sudo ln -s $(pwd)/llama.cpp/main /usr/local/bin/llamacpp
+```yaml
+providers:
+  openai:
+    api_key: "sk-..."
+    organization: "org-..."  # optional
+  anthropic:
+    api_key: "sk-ant-..."
+  groq:
+    api_key: "gsk_..."
+  openrouter:
+    api_key: "sk-or-..."
+
+defaults:
+  provider: openai
+  model: gpt-4o
+  temperature: 0.7
+  max_tokens: 4096
 ```
 
-Next we'll link the tokenizer
-```bash
-sudo ln -s $(pwd)/tokenize /usr/local/bin/llamatokenize
+**Priority order**: Explicit constructor values > Environment variables > Config file > Defaults
+
+## Provider Failover
+
+The unified `Client` automatically handles failover:
+
+```crystal
+class ResilientClient < Llamero::Client
+  def initialize
+    super(
+      primary: :openai,
+      fallbacks: [:anthropic, :groq],
+      retry_config: Llamero::RetryConfig.new(
+        max_retries: 3,
+        base_delay: 1.second
+      )
+    )
+
+    # Optional: Monitor failovers
+    on_fallback do |from, to, error|
+      Log.warn { "Failing over from #{from} to #{to}: #{error.message}" }
+    end
+
+    on_retry do |provider, attempt, error|
+      Log.info { "Retry #{attempt} for #{provider}" }
+    end
+  end
+end
 ```
 
-You will also need to download some models. This is a quick reference list. You can choose any model that's already quantized into gguf, or you can convert your own models using the llama.cpp quantization tool.
+### Retry Behavior
 
-Choose a model from below to start with. The links should bring you directly to the model files page. You want to "download" the model file. 
+| Error Type | Behavior |
+|------------|----------|
+| Rate Limit (429) | Retry with exponential backoff |
+| Server Error (5xx) | Retry with backoff |
+| Auth Error (401/403) | Immediate failover (no retry) |
+| Quota Exceeded (402) | Immediate failover |
 
-| Model Name          | Description                                   | RAM Required | Prompt Template |
-|---------------------|-----------------------------------------------| ------------ | --------------- |
-| [Mixtral dolphin-2.7-mixtral-8x7b-GGUF](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF/blob/main/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf) | A quantized model optimized for 8x7b settings, works about as well as ChatGPT 4 | ~27GB        | [chat template](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF#prompt-template-chatml) |
-| [Mistril-7B-instruct-v0.2-GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/blob/main/mistral-7b-instruct-v0.2.Q5_K_S.gguf) | A quantized model from Mistril, works about as well as ChatGPT 3.5 | ~6GB | [chat template](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF#prompt-template-mistral) |
-| [Llama3 8b-Instruct-GGUF](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/blob/main/Meta-Llama-3-8B-Instruct-Q5_K_M.gguf) | A quantized model from Llama 3, works about as well as GPT-4 but limited knowledge | ~8GB | [chat template](https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF#prompt-format) |
+## Direct Provider Access
 
-You can always download a different model, it just needs to be in the `GGUF` quantized format, or you'll need to quantize the model from llama.cpp's quantization tool.
+For advanced use cases, access provider clients directly:
 
-Move the model you downloaded into a directory that you'll configure in your project to use.
-I recommend `~/models` as this is the default directory that Llamero will check for models.
+```crystal
+# OpenAI
+client = Llamero::OpenAIClient.new
+response = client.chat([Llamero::Message.user("Hello!")])
 
-## Installation
+# Anthropic
+client = Llamero::AnthropicClient.new
+response = client.chat([Llamero::Message.user("Hello!")])
 
-1. Add the dependency to your `shard.yml`:
+# With custom settings
+client = Llamero::OpenAIClient.new(
+  api_key: "sk-...",
+  default_model: "gpt-4o-mini",
+  timeout: 5.minutes
+)
+```
 
-   ```yaml
-   dependencies:
-     llamero:
-       github: crimson-knight/llamero
-   ```
+## API Reference
 
-2. Run `shards install`
+### Message
 
-## Getting Started
+```crystal
+Llamero::Message.system("You are a helpful assistant")
+Llamero::Message.user("Hello!")
+Llamero::Message.assistant("Hi there!")
+Llamero::Message.tool(content, tool_call_id, name)
+```
 
-`Llamero` uses several concepts for working with LLMs and your application.
+### ChatResponse
 
-1. **Prompts** - A `Llamero::BasePrompt` is a prompt chain that is used to create a prompt for a model. It typically is used to structure a workflow using prompt engineering techniques.
-2. **Grammars (aka Structured Responses)** - A `Llamero::BaseGrammar` is a structured response format that constraints how the LLM _can_ respond. This is a key element of Llamero's functionality that allows you to define a response schema and then easily interact with the models responses.
-3. **Models** - A `Llamero::BaseModel` is the model that is used for executing your prompt.
-4. **Training** - A `Llamero::BaseTrainingPromptTemplate` is for using your own `grammars` and `prompts` to create synthetic data for training your own prompts and structured responses.
+```crystal
+response.content        # String - the response text
+response.model          # String - model used
+response.usage          # Usage - token counts
+response.finish_reason  # String - why generation stopped
+response.parsed         # T? - parsed structured output
+response.provider_used  # Symbol - which provider was used
+response.attempts       # Int32 - total attempt count
+```
 
-Applications utilize prompts, grammars and models to execute workflows. Workflows are where you spend the majority of your time developing your application. Once you get the primary workflow _mostly_ working, then you can create synthetic data using your grammars and prompts to improve the accuracy of your model responses.
+### BaseGrammar
 
-#### Wait, why "mostly" working?
+Inherit from `BaseGrammar` to define structured response schemas:
 
-The trick to working with AI, and LLM's in particular, is you are working to get something that works _consistently_. You can quickly get a workflow that works 20-35% of the time, but reaching the 95%+ success range requires various methods of fine-tuning.
+```crystal
+class Analysis < Llamero::BaseGrammar
+  property sentiment : String = ""
+  property confidence : Float32 = 0.0
+  property keywords : Array(String) = [] of String
+end
 
-## Using Cursor Docs
+# Get JSON Schema for the grammar
+schema = Analysis.to_json_schema
+```
 
-If you're using the [Cursor](https://cursor.sh) editor, there are special docs that have been created to get the most out of `Llamero`.
+### RetryConfig
 
-In the `ai_docs` folder in this repo, you'll find the following docs that you can add to Cursor to get quick and accurate assistance while coding.
+```crystal
+# Default configuration
+Llamero::RetryConfig.new
 
-[How To Write Llamero Grammars](/ai_docs/grammars/how_to_write_a_grammar.md)
+# Aggressive retries
+Llamero::RetryConfig.aggressive
 
-[How To Write Llamero Prompts](/ai_docs/prompts/how_to_write_a_prompt.md)
+# Conservative (fewer retries)
+Llamero::RetryConfig.conservative
 
-[How To Use Llamero Models](/ai_docs/models/how_to_create_models.md)
+# No retries
+Llamero::RetryConfig.no_retry
 
-Using these docs, you can write prompts like the following example and Cursor will write the _correct_ code for you. **Note:** This currently works the best in the sidebar editor, which includes the `/edit` command. 
-
-Here is an example of how these docs can be used.
-![Cursor Doc Example](ai_docs/grammars/cursor_doc_example.png)
-
-## Examples
-
-Examples can be found in the [examples](examples) directory.
-
-## Current Best Practices
-
-- Only use `quick_chat` for quick tests.
-- Organize your grammars into a consistent directory that is separate from your prompts and models. This includes separate from you _data models_ in your application.
-- Grammar classes should have as little logic as possible. Ideally, zero logic.
-
-## The Circle of AI Life
-
-![Llamero Diagram](ai_docs/llamero-diagram.png)
-
-1. Start by choosing the right model for your needs. Some models are better for coding, vs natural language processing vs extracting data.
-2. Create your prompt template and grammar at the same time.
-
-## Embeddings
-
-Use a GGUF model that supports embeddings such as (SFR-Embedding-Mistral-GGUF)[https://huggingface.co/dranger003/SFR-Embedding-Mistral-GGUF/tree/main]
+# Custom
+Llamero::RetryConfig.new(
+  max_retries: 5,
+  base_delay: 500.milliseconds,
+  max_delay: 30.seconds,
+  exponential_base: 2.0,
+  jitter: 0.1
+)
+```
 
 ## Development
 
- To Do:
- [] Generate chat templates by reading from the model (integrate with HF's C-lib)
+```bash
+# Run tests
+crystal spec
 
-TODO: Write development instructions here
+# Type check
+crystal build src/llamero.cr --no-codegen
+```
 
 ## Contributing
 
-Open an issue to discuss any feature that you want to add before developing it.
-If you're creating a PR to address a bug, please use the issue number in the branch name, like `issue/1234-description`.
-New feature branches should follow this convention: `feature/1234-description`.
+Open an issue to discuss features before developing.
+
+Branch naming:
+- Bug fixes: `issue/1234-description`
+- Features: `feature/1234-description`
 
 1. Fork it (<https://github.com/crimson-knight/llamero/fork>)
-2. Create your feature branch (`git checkout -b issue/1234-description`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin issue/1234-description`)
-5. Create a new Pull Request
+2. Create your feature branch (`git checkout -b feature/description`)
+3. Commit your changes (`git commit -am 'Add feature'`)
+4. Push to the branch (`git push origin feature/description`)
+5. Create a Pull Request
 
 ## Contributors
 
