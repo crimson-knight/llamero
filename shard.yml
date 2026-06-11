@@ -16,6 +16,7 @@ license: MIT
 dependencies:
   crinja:
     github: straight-shoota/crinja
+    version: ~> 0.9.0
 
 development_dependencies:
   webmock:
