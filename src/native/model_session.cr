@@ -160,6 +160,14 @@ module Llamero::Native
     # `train.jsonl` (and optionally `valid.jsonl`) in mlx_lm format.
     # `output_dir` defaults to `~/.llamero/adapters/<name>`.
     #
+    # Datasets that kept the default format are automatically rendered
+    # through the model's own chat template (TrainingDataset.template_from)
+    # when the model directory is available locally, so training matches
+    # inference rendering exactly; the built-in `template_for` templates are
+    # the fallback. Check `dataset.template_source` afterwards to see which
+    # template was used ("model-chat-template" or "built-in"). Passing
+    # `format:` when building the dataset skips the auto-template entirely.
+    #
     # Training streams TrainingProgressEvent / TrainingValidationEvent to
     # event listeners (and the optional block), so apps can show loss curves
     # live. The base model is restored when training finishes or fails -
@@ -187,6 +195,7 @@ module Llamero::Native
 
       data_dir = case dataset
                  in TrainingDataset
+                   apply_model_template(dataset)
                    dataset.write(adapter_dir.join("dataset"))
                  in Path, String
                    dir = Path[dataset].expand
@@ -415,6 +424,35 @@ module Llamero::Native
           end
         end
       end
+    end
+
+    # Auto-template path for train_adapter: datasets without an explicit
+    # format render through the model's own chat template when it is on
+    # disk, else through the built-in template for the model family. Either
+    # way the choice lands in dataset.template_source.
+    private def apply_model_template(dataset : TrainingDataset) : Nil
+      return if dataset.format_explicit?
+
+      model_template = local_model_dir.try { |dir| TrainingDataset.template_from(dir) }
+      if model_template
+        dataset.use_template(model_template, "model-chat-template")
+      else
+        dataset.use_template(TrainingDataset.template_for(@model_id), "built-in")
+      end
+    end
+
+    # The model's local directory, when one exists: an explicit model_path
+    # wins, else the downloader cache location for the model id. Never
+    # triggers a download.
+    private def local_model_dir : Path?
+      if path = @model_path
+        dir = Path[path].expand
+        return File.directory?(dir) ? dir : nil
+      end
+
+      downloader = @downloader || ModelDownloader.new
+      dir = downloader.model_dir(@model_id)
+      File.directory?(dir) ? dir : nil
     end
 
     private def training_request_json(name : String, data_dir : Path, output_dir : Path, config : AdapterTrainingConfig) : String
