@@ -94,14 +94,15 @@ module Llamero
       request_body = build_chat_request(messages, model, temperature, max_tokens)
 
       # OpenRouter passes through response_format to underlying providers
-      request_body["response_format"] = {
-        "type" => "json_schema",
-        "json_schema" => {
-          "name" => schema["title"]?.try(&.as_s) || "response",
-          "strict" => true,
-          "schema" => schema
-        }
+      response_format = {
+        "type"        => JSON::Any.new("json_schema"),
+        "json_schema" => JSON::Any.new({
+          "name"   => JSON::Any.new(schema["title"]?.try(&.as_s) || "response"),
+          "strict" => JSON::Any.new(true),
+          "schema" => JSON::Any.new(schema),
+        }),
       }
+      request_body["response_format"] = JSON::Any.new(response_format)
 
       response = make_request("POST", "/v1/chat/completions", request_body.to_json)
       handle_error_response(response) unless response.success?
@@ -117,7 +118,7 @@ module Llamero
       &block : String -> Nil
     ) : Nil
       request_body = build_chat_request(messages, model, temperature, max_tokens)
-      request_body["stream"] = true
+      request_body["stream"] = JSON::Any.new(true)
 
       uri = URI.parse(@base_url)
 
@@ -129,7 +130,7 @@ module Llamero
         headers["Content-Type"] = "application/json"
         add_auth_headers(headers)
 
-        client.post("/v1/chat/completions", headers: headers, body: request_body.to_json) do |response|
+        client.post(request_path("/v1/chat/completions"), headers: headers, body: request_body.to_json) do |response|
           handle_error_response(response) unless response.success?
 
           response.body_io.each_line do |line|
@@ -167,26 +168,22 @@ module Llamero
       model : String?,
       temperature : Float32?,
       max_tokens : Int32?
-    ) : Hash(String, JSON::Any::Type)
-      request = {} of String => JSON::Any::Type
-
-      request["model"] = model || @default_model
-
-      # Convert messages to OpenAI format
-      request["messages"] = messages.map do |msg|
+    ) : Hash(String, JSON::Any)
+      messages_json = messages.map do |msg|
         msg_hash = {
-          "role" => role_to_string(msg.role),
-          "content" => msg.content
-        } of String => String | Nil
-
-        msg_hash["name"] = msg.name if msg.name
-        msg_hash["tool_call_id"] = msg.tool_call_id if msg.tool_call_id
-
-        msg_hash
+          "role"    => JSON::Any.new(role_to_string(msg.role)),
+          "content" => JSON::Any.new(msg.content),
+        }
+        msg_hash["name"] = JSON::Any.new(msg.name.not_nil!) if msg.name
+        msg_hash["tool_call_id"] = JSON::Any.new(msg.tool_call_id.not_nil!) if msg.tool_call_id
+        JSON::Any.new(msg_hash)
       end
 
-      request["temperature"] = temperature if temperature
-      request["max_tokens"] = max_tokens if max_tokens
+      request = {} of String => JSON::Any
+      request["model"] = JSON::Any.new(model || @default_model)
+      request["messages"] = JSON::Any.new(messages_json)
+      request["temperature"] = JSON::Any.new(temperature.to_f64) if temperature
+      request["max_tokens"] = JSON::Any.new(max_tokens.to_i64) if max_tokens
 
       request
     end

@@ -1,11 +1,22 @@
 name: llamero
-version: 0.1.0
+version: 1.0.0
 
 authors:
   - crimson-knight <crimsonknightstudios@gmail.com>
+
+description: |
+  A Crystal library for interacting with AI/LLM providers with automatic
+  failover and structured output support. Supports OpenAI, Anthropic,
+  Groq, and OpenRouter.
 
 crystal: '>= 1.11.2'
 
 license: MIT
 
 dependencies:
+  crinja:
+    github: straight-shoota/crinja
+
+development_dependencies:
+  webmock:
+    github: manastech/webmock.cr

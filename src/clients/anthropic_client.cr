@@ -84,10 +84,11 @@ module Llamero
       request_body = build_chat_request(messages, model, temperature, max_tokens)
 
       # Add structured output response format (Anthropic beta)
-      request_body["output_format"] = {
-        "type" => "json_schema",
-        "json_schema" => schema
+      output_format = {
+        "type"        => JSON::Any.new("json_schema"),
+        "json_schema" => JSON::Any.new(schema),
       }
+      request_body["output_format"] = JSON::Any.new(output_format)
 
       # Add beta header for structured outputs
       headers = HTTP::Headers.new
@@ -107,7 +108,7 @@ module Llamero
       &block : String -> Nil
     ) : Nil
       request_body = build_chat_request(messages, model, temperature, max_tokens)
-      request_body["stream"] = true
+      request_body["stream"] = JSON::Any.new(true)
 
       uri = URI.parse(@base_url)
 
@@ -154,27 +155,28 @@ module Llamero
       model : String?,
       temperature : Float32?,
       max_tokens : Int32?
-    ) : Hash(String, JSON::Any::Type)
-      request = {} of String => JSON::Any::Type
+    ) : Hash(String, JSON::Any)
+      request = {} of String => JSON::Any
 
-      request["model"] = model || @default_model
-      request["max_tokens"] = max_tokens || 4096
+      request["model"] = JSON::Any.new(model || @default_model)
+      request["max_tokens"] = JSON::Any.new((max_tokens || 4096).to_i64)
 
       # Anthropic separates system message from other messages
       system_message = messages.find { |m| m.role.system? }
       if system_message
-        request["system"] = system_message.content
+        request["system"] = JSON::Any.new(system_message.content)
       end
 
       # Convert non-system messages to Anthropic format
-      request["messages"] = messages.reject { |m| m.role.system? }.map do |msg|
-        {
-          "role" => role_to_string(msg.role),
-          "content" => msg.content
-        }
+      messages_json = messages.reject { |m| m.role.system? }.map do |msg|
+        JSON::Any.new({
+          "role"    => JSON::Any.new(role_to_string(msg.role)),
+          "content" => JSON::Any.new(msg.content),
+        })
       end
+      request["messages"] = JSON::Any.new(messages_json)
 
-      request["temperature"] = temperature if temperature
+      request["temperature"] = JSON::Any.new(temperature.to_f64) if temperature
 
       request
     end

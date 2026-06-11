@@ -215,13 +215,22 @@ module Llamero
 
         case method.upcase
         when "GET"
-          client.get(path, headers: headers)
+          client.get(request_path(path), headers: headers)
         when "POST"
-          client.post(path, headers: headers, body: body)
+          client.post(request_path(path), headers: headers, body: body)
         else
           raise APIError.new("Unsupported HTTP method: #{method}")
         end
       end
+    end
+
+    # HTTP::Client.new(uri) keeps only scheme/host/port, so any path prefix
+    # in the base URL (e.g. Groq's "/openai", OpenRouter's "/api") must be
+    # re-applied to each request path.
+    protected def request_path(path : String) : String
+      prefix = URI.parse(@base_url).path
+      return path if prefix.empty? || prefix == "/"
+      prefix.rstrip('/') + path
     end
 
     # Add authentication headers - override in subclasses for different auth patterns

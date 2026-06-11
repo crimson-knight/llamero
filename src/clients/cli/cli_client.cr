@@ -113,6 +113,22 @@ module Llamero
       @last_session_id = parser.session_id
     end
 
+    # CLI backends do not expose schema-constrained output yet (it will ride
+    # on tool_use). Declared so Client's failover dispatch compiles; the
+    # Feature::StructuredOutput filter prevents routing here at runtime.
+    def chat_structured(
+      messages : Array(Message),
+      response_schema : T.class,
+      model : String? = nil,
+      temperature : Float32? = nil,
+      max_tokens : Int32? = nil
+    ) : ChatResponse(T) forall T
+      raise APIError.new(
+        "#{provider_name} does not support structured output yet",
+        provider: provider_name.downcase
+      )
+    end
+
     def supports?(feature : Feature) : Bool
       case feature
       when .streaming?         then true

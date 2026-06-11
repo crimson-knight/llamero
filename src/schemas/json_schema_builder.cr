@@ -83,19 +83,20 @@ module Llamero
 
     # Build schema for a specific type
     private macro build_type_schema(type, is_nilable)
-      {% if type <= String %}
+      {% resolved = type.resolve %}
+      {% if resolved <= String %}
         build_string_schema({{ is_nilable }})
-      {% elsif type <= Int8 || type <= Int16 || type <= Int32 || type <= Int64 || type <= UInt8 || type <= UInt16 || type <= UInt32 || type <= UInt64 %}
+      {% elsif resolved <= Int8 || resolved <= Int16 || resolved <= Int32 || resolved <= Int64 || resolved <= UInt8 || resolved <= UInt16 || resolved <= UInt32 || resolved <= UInt64 %}
         build_integer_schema({{ is_nilable }})
-      {% elsif type <= Float32 || type <= Float64 %}
+      {% elsif resolved <= Float32 || resolved <= Float64 %}
         build_number_schema({{ is_nilable }})
-      {% elsif type <= Bool %}
+      {% elsif resolved <= Bool %}
         build_boolean_schema({{ is_nilable }})
-      {% elsif type <= Time %}
+      {% elsif resolved <= Time %}
         build_datetime_schema({{ is_nilable }})
-      {% elsif type <= Array %}
+      {% elsif resolved < Array %}
         build_array_schema({{ type }}, {{ is_nilable }})
-      {% elsif type <= Llamero::BaseGrammar %}
+      {% elsif resolved <= Llamero::BaseGrammar %}
         build_object_ref_schema({{ type }}, {{ is_nilable }})
       {% else %}
         # Fallback for unknown types - treat as string

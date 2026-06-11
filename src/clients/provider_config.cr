@@ -14,6 +14,7 @@ module Llamero
       when .anthropic?   then :anthropic
       when .groq?        then :groq
       when .open_router? then :openrouter
+      else                    :unknown
       end
     end
 
@@ -24,7 +25,7 @@ module Llamero
       when :groq       then Groq
       when :openrouter then OpenRouter
       else
-        raise ArgumentError.new("Unknown provider: #{sym}")
+        raise APIError.new("Unknown provider: #{sym}")
       end
     end
   end
