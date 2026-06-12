@@ -18,6 +18,18 @@ no separate QLoRA mode to configure.
 Prerequisites are the same as the `local-inference` skill: Apple Silicon, the
 Swift bridge built once via `build.sh`, and a loaded model session.
 
+## Storage root
+
+Default adapter storage is under `~/.llamero`. Apps that need app-owned AI
+data set this at boot before creating runtimes or training:
+
+```crystal
+Llamero.storage_root = Path.home.join(".scribe")
+```
+
+`LLAMERO_HOME=/path/to/root` is the env alternative; programmatic wins. The
+default `train_adapter` output becomes `Llamero::Storage.adapters_dir/<name>/`.
+
 ## Recipe: teach a model facts it cannot know (complete program)
 
 ```crystal
@@ -66,10 +78,11 @@ session.deactivate_adapters
 runtime.close
 ```
 
-What happens: the artifact is written to `~/.llamero/adapters/lx900-manual/`
-(standard mlx_lm format: `adapters.safetensors` + `adapter_config.json`),
-registered in `runtime.adapters` under the name you gave, and the resident
-model is restored — training never permanently changes it.
+What happens: the artifact is written to
+`Llamero::Storage.adapters_dir/lx900-manual/` (standard mlx_lm format:
+`adapters.safetensors` + `adapter_config.json`), registered in
+`runtime.adapters` under the name you gave, and the resident model is restored
+— training never permanently changes it.
 
 ## How to know the training worked
 

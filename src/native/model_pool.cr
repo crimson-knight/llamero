@@ -36,10 +36,10 @@ module Llamero::Native
   #
   # ```crystal
   # pool = Llamero::Native::ModelPool.new
-  # pool.add("specialist",
-  #   model_id: "mlx-community/gemma-3-1b-it-4bit",
-  #   adapters: [{"llamero-docs", Path.home.join(".llamero", "adapters", "llamero-docs").to_s}],
-  #   default_stack: Llamero::Native::AdapterStack.additive([
+# pool.add("specialist",
+#   model_id: "mlx-community/gemma-3-1b-it-4bit",
+#   adapters: [{"llamero-docs", Llamero::Storage.adapters_dir.join("llamero-docs").to_s}],
+#   default_stack: Llamero::Native::AdapterStack.additive([
   #     Llamero::Native::AdapterSlot.new("llamero-docs"),
   #   ])
   # )

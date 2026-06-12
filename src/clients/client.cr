@@ -200,7 +200,7 @@ module Llamero
       if @providers.empty?
         raise APIError.new(
           "No providers configured. Please set API keys via environment variables " \
-          "(OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) or in .llamero/config.yml"
+          "(OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.) or in the project config file"
         )
       end
     end

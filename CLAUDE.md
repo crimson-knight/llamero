@@ -32,6 +32,22 @@ Minimal rules that prevent most mistakes:
 - Native track on a machine without the built Swift bridge silently uses a
   deterministic **mock**. Gate real-inference code on `runtime.real_bridge?`.
 
+## Storage root
+
+Default storage is `~/.llamero`. Apps that own their AI data directory must set
+the root at boot before creating runtimes:
+
+```crystal
+Llamero.storage_root = Path.home.join(".scribe")
+```
+
+`LLAMERO_HOME=/path/to/root` also works; the programmatic setter wins. The root
+controls local model downloads (`models/`), trained adapters (`adapters/`),
+bridge lookup (`lib/`), and configured audio model caches (`audio_models/`).
+FluidAudio 0.15.2 still hardcodes English Kokoro G2P assets under its TTS
+cache; see `development_docs/storage_configuration.md` before promising fully
+relocated TTS text synthesis.
+
 ## Working on the llamero repo itself
 
 ```bash
@@ -76,6 +92,6 @@ Repo conventions and gotchas:
 The shard ships these skills and docs; the Ashard shards fork installs them
 into the consuming project's `.claude/` namespaced as `llamero--<skill>`.
 Source lives at `lib/llamero/`, so the bridge build is
-`cd lib/llamero/native/llamero-mlx && ./build.sh` (installs the dylib to
-`~/.llamero/lib/`, found from any project). Models cache in
-`~/.llamero/models/`, trained adapters in `~/.llamero/adapters/`.
+`cd lib/llamero/native/llamero-mlx && ./build.sh`. The build scripts install
+to `$LLAMERO_HOME/lib` when that env var is set, otherwise `~/.llamero/lib/`.
+Runtime model and adapter paths come from `Llamero.storage_root`.

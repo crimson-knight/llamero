@@ -6,6 +6,7 @@ require "../src/llamero"
 Spec.before_each do
   WebMock.reset
   Llamero::ConfigLoader.reset!
+  Llamero.reset_storage_root!
 end
 
 # Test Grammar classes for testing structured output

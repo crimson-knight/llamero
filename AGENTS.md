@@ -43,10 +43,26 @@ response = client.chat_structured([Llamero::Message.user("Random person")], Pers
 person = response.parsed.not_nil!
 ```
 
+## Storage root for consuming apps
+
+Default storage is `~/.llamero`. Apps that need app-owned AI data set this at
+boot before creating runtimes:
+
+```crystal
+Llamero.storage_root = Path.home.join(".scribe")
+```
+
+`LLAMERO_HOME=/path/to/root` is the env alternative; programmatic wins. The
+root controls `models/`, `adapters/`, bridge `lib/` lookup, and configured
+audio model caches under `audio_models/`. FluidAudio 0.15.2 still pins English
+Kokoro G2P assets to its own TTS cache; see
+`development_docs/storage_configuration.md`.
+
 ## Local inference on Apple Silicon (no API key)
 
 One-time machine setup: `cd lib/llamero/native/llamero-mlx && ./build.sh`
-(builds the Swift MLX bridge, installs to `~/.llamero/lib/`).
+(builds the Swift MLX bridge, installs to `$LLAMERO_HOME/lib` or
+`~/.llamero/lib/`).
 
 ```crystal
 runtime = Llamero::Native::MLXRuntime.new(model_id: "mlx-community/gemma-4-e2b-it-4bit")
@@ -75,7 +91,7 @@ member's default adapter stack auto-activates, and the app routes by name:
 pool = Llamero::Native::ModelPool.new
 pool.add("specialist",
   model_id: "mlx-community/gemma-3-1b-it-4bit",
-  adapters: [{"llamero-docs", Path.home.join(".llamero", "adapters", "llamero-docs").to_s}],
+  adapters: [{"llamero-docs", Llamero::Storage.adapters_dir.join("llamero-docs").to_s}],
   default_stack: Llamero::Native::AdapterStack.additive([
     Llamero::Native::AdapterSlot.new("llamero-docs"),
   ])
@@ -110,7 +126,7 @@ session.deactivate_adapters # knowledge off; base model never reloaded
 ```
 
 Training on a 4-bit model is automatically QLoRA. Artifacts land in
-`~/.llamero/adapters/<name>/` (mlx_lm format) and auto-register. Training
+`Llamero::Storage.adapters_dir/<name>/` (mlx_lm format) and auto-register. Training
 requires a loaded model and no active adapters. Chat templates are
 automatic: when the model is downloaded locally, `train_adapter` renders the
 dataset through the model's own chat template (the same Jinja template used

@@ -16,6 +16,40 @@ private def mock_audio_runtime
   {runtime, bridge}
 end
 
+private class CaptureAudioBridge < Llamero::Native::MockAudioBridge
+  getter last_config : JSON::Any?
+
+  def initialize
+    super
+    @last_config = nil
+  end
+
+  def create_runtime(config_json : String) : Int64
+    @last_config = JSON.parse(config_json)
+    super(config_json)
+  end
+end
+
+private def with_llamero_home(value : String?, &)
+  previous = ENV["LLAMERO_HOME"]?
+  if value
+    ENV["LLAMERO_HOME"] = value
+  else
+    ENV.delete("LLAMERO_HOME")
+  end
+
+  begin
+    yield
+  ensure
+    if previous
+      ENV["LLAMERO_HOME"] = previous
+    else
+      ENV.delete("LLAMERO_HOME")
+    end
+    Llamero.reset_storage_root!
+  end
+end
+
 describe Llamero::Native::AudioRuntime do
   it "instantiates against the mock bridge with the documented configuration" do
     runtime = Llamero::Native::AudioRuntime.new(
@@ -28,6 +62,39 @@ describe Llamero::Native::AudioRuntime do
     runtime.tts_voice.should eq("af_heart")
     runtime.bridge_name.should eq("mock")
     runtime.real_bridge?.should be_false
+  end
+
+  it "does not send FluidAudio a models_dir without storage configuration" do
+    with_llamero_home(nil) do
+      bridge = CaptureAudioBridge.new
+      Llamero::Native::AudioRuntime.new(bridge: bridge)
+
+      bridge.last_config.not_nil!.as_h.has_key?("models_dir").should be_false
+    end
+  end
+
+  it "derives the audio models_dir from the configured storage root" do
+    with_llamero_home(nil) do
+      root = Path[Dir.tempdir].join("llamero-audio-storage-#{Random::Secure.hex(6)}")
+      Llamero.storage_root = root
+      bridge = CaptureAudioBridge.new
+      runtime = Llamero::Native::AudioRuntime.new(bridge: bridge)
+
+      expected = root.join("audio_models").expand
+      runtime.models_dir.should eq(expected)
+      bridge.last_config.not_nil!["models_dir"].as_s.should eq(expected.to_s)
+    end
+  end
+
+  it "lets callers override the audio models_dir directly" do
+    with_llamero_home(nil) do
+      root = Path[Dir.tempdir].join("llamero-audio-models-#{Random::Secure.hex(6)}")
+      bridge = CaptureAudioBridge.new
+      runtime = Llamero::Native::AudioRuntime.new(models_dir: root, bridge: bridge)
+
+      runtime.models_dir.should eq(root.expand)
+      bridge.last_config.not_nil!["models_dir"].as_s.should eq(root.expand.to_s)
+    end
   end
 
   it "rejects unknown asr model versions" do

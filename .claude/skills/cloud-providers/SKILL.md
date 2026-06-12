@@ -14,7 +14,7 @@ it, or use a concrete provider client directly (`Llamero::OpenAIClient.new`).
 
 ## Setup
 
-API keys come from environment variables (or `.llamero/config.yml`):
+API keys come from environment variables (or the project config file):
 
 ```bash
 export OPENAI_API_KEY="sk-..."
@@ -24,6 +24,17 @@ export OPENROUTER_API_KEY="sk-or-..."
 ```
 
 Only the providers you actually list need keys.
+
+## Storage root
+
+If the same app also uses llamero native models/adapters/audio, set the
+app-owned storage root at boot before creating runtimes:
+
+```crystal
+Llamero.storage_root = Path.home.join(".scribe")
+```
+
+`LLAMERO_HOME=/path/to/root` is the env alternative; programmatic wins.
 
 ## Recipe: chat with failover (complete program)
 

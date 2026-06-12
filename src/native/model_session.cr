@@ -1,5 +1,6 @@
 require "json"
 require "../clients/base_api_client"
+require "../config/storage"
 require "../grammars/base_grammar"
 require "./bridge"
 require "./events"
@@ -16,7 +17,7 @@ module Llamero::Native
   # model - that is the core invariant of the native track, and `load_count`
   # plus `base_model_reloaded?` make violations visible.
   #
-  # ```crystal
+  # ```
   # session = runtime.start_session
   # session.load_model
   #
@@ -59,7 +60,7 @@ module Llamero::Native
       @model_id : String,
       @registry : AdapterRegistry,
       @model_path : String? = nil,
-      @downloader : ModelDownloader? = nil
+      @downloader : ModelDownloader? = nil,
     )
       @active_adapter_stack = AdapterStack.none
       @event_listeners = [] of NativeEvent ->
@@ -99,8 +100,8 @@ module Llamero::Native
       @bridge.load_model(@handle, request_json) do |frame|
         event = dispatch(frame)
         case event
-        when ModelLoadedEvent    then metrics = event.metrics
-        when NativeErrorEvent    then error = event
+        when ModelLoadedEvent then metrics = event.metrics
+        when NativeErrorEvent then error = event
         end
       end
 
@@ -158,7 +159,7 @@ module Llamero::Native
     # The dataset is either a TrainingDataset (written to
     # `<output_dir>/dataset/`) or a directory already containing
     # `train.jsonl` (and optionally `valid.jsonl`) in mlx_lm format.
-    # `output_dir` defaults to `~/.llamero/adapters/<name>`.
+    # `output_dir` defaults to the configured adapter storage directory.
     #
     # Datasets that kept the default format are automatically rendered
     # through the model's own chat template (TrainingDataset.template_from)
@@ -174,7 +175,7 @@ module Llamero::Native
     # the resident session keeps working either way, and the trained adapter
     # only affects generation once explicitly activated.
     #
-    # ```crystal
+    # ```
     # descriptor = session.train_adapter("lx900-manual", dataset)
     # session.activate_adapters(
     #   AdapterStack.additive([AdapterSlot.new("lx900-manual")])
@@ -191,7 +192,7 @@ module Llamero::Native
       raise ArgumentError.new("Adapter name cannot be blank") if name.blank?
       config.validate!
 
-      adapter_dir = Path[output_dir || Path.home.join(".llamero", "adapters", name)].expand
+      adapter_dir = Path[output_dir || Llamero::Storage.adapters_dir.join(name)].expand
 
       data_dir = case dataset
                  in TrainingDataset
@@ -231,7 +232,7 @@ module Llamero::Native
       name : String,
       dataset : TrainingDataset | Path | String,
       config : AdapterTrainingConfig = AdapterTrainingConfig.new,
-      output_dir : Path | String | Nil = nil
+      output_dir : Path | String | Nil = nil,
     ) : AdapterDescriptor
       train_adapter(name, dataset, config, output_dir) { }
     end
@@ -240,7 +241,7 @@ module Llamero::Native
     def chat(
       messages : Array(Message),
       temperature : Float32? = nil,
-      max_tokens : Int32? = nil
+      max_tokens : Int32? = nil,
     ) : NativeChatResponse(Nil)
       chat_stream(messages, temperature, max_tokens) { }
     end
@@ -284,7 +285,7 @@ module Llamero::Native
       messages : Array(Message),
       response_schema : T.class,
       temperature : Float32? = nil,
-      max_tokens : Int32? = nil
+      max_tokens : Int32? = nil,
     ) : NativeChatResponse(T) forall T
       ensure_loaded
       schema_json = T.to_json_schema_string
@@ -400,7 +401,7 @@ module Llamero::Native
       temperature : Float32?,
       max_tokens : Int32?,
       structured : Bool,
-      schema_json : String? = nil
+      schema_json : String? = nil,
     ) : String
       JSON.build do |json|
         json.object do

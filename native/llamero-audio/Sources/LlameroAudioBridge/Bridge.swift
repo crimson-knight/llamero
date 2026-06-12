@@ -30,10 +30,13 @@ struct AudioRuntimeConfig: Codable {
     var asrModelVersion: String?
     /// Default Kokoro voice (e.g. "af_heart"); per-request voice overrides it.
     var ttsVoice: String?
+    /// Optional base directory for FluidAudio model artifacts.
+    var modelsDir: String?
 
     enum CodingKeys: String, CodingKey {
         case asrModelVersion = "asr_model_version"
         case ttsVoice = "tts_voice"
+        case modelsDir = "models_dir"
     }
 }
 
@@ -110,6 +113,27 @@ final class AudioRuntimeBox: @unchecked Sendable {
 
     var asrVersion: AsrModelVersion {
         config.asrModelVersion == "v2" ? .v2 : .v3
+    }
+
+    var modelsDirectory: URL? {
+        guard let path = config.modelsDir?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !path.isEmpty
+        else {
+            return nil
+        }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    func asrModelsDirectory(for version: AsrModelVersion) -> URL? {
+        guard let root = modelsDirectory else {
+            return nil
+        }
+        let repo: Repo = version == .v2 ? .parakeetV2 : .parakeetV3
+        return root.appendingPathComponent(repo.folderName, isDirectory: true)
+    }
+
+    func streamingModelsDirectory() -> URL? {
+        modelsDirectory?.appendingPathComponent("parakeet-eou-streaming", isDirectory: true)
     }
 
     func checkoutEouManager(key: String) -> StreamingEouAsrManager? {
@@ -357,6 +381,7 @@ private func ensureAsrManager(_ runtime: AudioRuntimeBox, sink: EventSink) async
     // lives behind a lock so the closure stays Sendable.
     let throttle = ProgressThrottle()
     let models = try await AsrModels.downloadAndLoad(
+        to: runtime.asrModelsDirectory(for: version),
         version: version,
         progressHandler: { progress in
             // Throttle to whole-percent steps; frames cross an FFI boundary.
@@ -401,6 +426,7 @@ private func ensureOfflineDiarizerModels(_ runtime: AudioRuntimeBox, sink: Event
 
     let throttle = ProgressThrottle()
     let models = try await OfflineDiarizerModels.load(
+        from: runtime.modelsDirectory,
         progressHandler: { progress in
             let fraction = progress.fractionCompleted
             if throttle.shouldReport(fraction) {
@@ -430,7 +456,7 @@ private func ensureTts(_ runtime: AudioRuntimeBox, sink: EventSink) async throws
     sink.emit(["event": "tts_model_load_started"])
     let start = Date()
 
-    let tts = KokoroAneManager(defaultVoice: runtime.config.ttsVoice)
+    let tts = KokoroAneManager(defaultVoice: runtime.config.ttsVoice, directory: runtime.modelsDirectory)
     try await tts.initialize()
 
     runtime.tts = tts
@@ -981,7 +1007,7 @@ private func ensureStreamManager(_ box: AudioStreamBox, sink: EventSink) async t
         let fresh = StreamingEouAsrManager(
             chunkSize: box.chunkSize, eouDebounceMs: box.eouDebounceMs)
         try await fresh.loadModels(
-            to: nil, configuration: nil,
+            to: runtime.streamingModelsDirectory(), configuration: nil,
             progressHandler: { progress in
                 if throttle.shouldReport(progress.fractionCompleted) {
                     sink.emit([

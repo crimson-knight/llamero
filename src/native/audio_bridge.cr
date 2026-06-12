@@ -1,4 +1,5 @@
 require "json"
+require "../config/storage"
 require "./errors"
 require "./mlx_bridge" # for the shared LibDL declarations
 
@@ -129,7 +130,7 @@ module Llamero::Native
     # 2. The in-repo Swift build products (native/llamero-audio/.build/...)
     # 3. The shard's build products when llamero is a dependency
     #    (lib/llamero/native/llamero-audio/.build/...)
-    # 4. ~/.llamero/lib/libLlameroAudioBridge.dylib (build.sh installs here)
+    # 4. Configured storage lib directory (build.sh installs here by default)
     # 5. /usr/local/lib/libLlameroAudioBridge.dylib
     def self.discover_library_path : String?
       if from_env = ENV["LLAMERO_AUDIO_LIB"]?
@@ -141,7 +142,7 @@ module Llamero::Native
         "native/llamero-audio/.build/arm64-apple-macosx/release/libLlameroAudioBridge.dylib",
         "lib/llamero/native/llamero-audio/.build/release/libLlameroAudioBridge.dylib",
         "lib/llamero/native/llamero-audio/.build/arm64-apple-macosx/release/libLlameroAudioBridge.dylib",
-        Path.home.join(".llamero", "lib", "libLlameroAudioBridge.dylib").to_s,
+        Llamero::Storage.lib_dir.join("libLlameroAudioBridge.dylib").to_s,
         "/usr/local/lib/libLlameroAudioBridge.dylib",
       ].find { |candidate| File.exists?(candidate) }
     end

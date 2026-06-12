@@ -339,6 +339,26 @@ describe "Llamero::Native::ModelSession#train_adapter" do
     end
   end
 
+  it "defaults trained adapter artifacts under the configured storage root" do
+    root = Path[tmp_dir]
+    begin
+      Llamero.storage_root = root
+
+      runtime = Llamero::Native::MLXRuntime.new(model_id: "test-model", bridge: Llamero::Native::MockBridge.new)
+      session = runtime.start_session
+      session.load_model
+
+      descriptor = session.train_adapter("storage-default", sample_dataset)
+      expected = root.join("adapters", "storage-default").expand
+
+      descriptor.path.should eq(expected.to_s)
+      File.exists?(expected.join("adapters.safetensors")).should be_true
+      runtime.adapters.registered?("storage-default").should be_true
+    ensure
+      FileUtils.rm_rf(root.to_s)
+    end
+  end
+
   it "auto-renders default-format datasets through the model's own chat template" do
     dir = tmp_dir
     model_dir = tmp_dir

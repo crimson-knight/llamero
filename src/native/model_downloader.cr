@@ -1,6 +1,7 @@
 require "http/client"
 require "json"
 require "file_utils"
+require "../config/storage"
 require "./errors"
 
 module Llamero::Native
@@ -12,8 +13,8 @@ module Llamero::Native
   # the Swift HuggingFace client routes work through the main dispatch queue,
   # which deadlocks inside a non-Swift host process.
   #
-  # Models are cached under `~/.llamero/models/<org>--<name>/` with a
-  # `.llamero-complete` marker written only after every file lands. Set
+  # Models are cached under the configured storage root with a completion
+  # marker written only after every file lands. Set
   # `HF_TOKEN` (or `HUGGING_FACE_HUB_TOKEN`) for gated models such as Gemma.
   class ModelDownloader
     DEFAULT_ENDPOINT = "https://huggingface.co"
@@ -33,15 +34,15 @@ module Llamero::Native
       /^chat_template\.(jinja|json)$/,
     ]
 
-    COMPLETE_MARKER = ".llamero-complete"
+    COMPLETE_MARKER = "#{Llamero::Storage::DEFAULT_BASENAME}-complete"
     MAX_REDIRECTS   = 5
 
     getter cache_dir : Path
 
     def initialize(
-      cache_dir : Path | String = Path.home.join(".llamero", "models"),
+      cache_dir : Path | String = Llamero::Storage.models_dir,
       @endpoint : String = DEFAULT_ENDPOINT,
-      @token : String? = ENV["HF_TOKEN"]? || ENV["HUGGING_FACE_HUB_TOKEN"]?
+      @token : String? = ENV["HF_TOKEN"]? || ENV["HUGGING_FACE_HUB_TOKEN"]?,
     )
       @cache_dir = Path[cache_dir].expand
     end

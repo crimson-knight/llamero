@@ -1,19 +1,20 @@
 require "yaml"
+require "./storage"
 
 module Llamero
-  # Configuration loader that reads from .llamero/config.yml (project-relative) with ENV variable fallback
+  # Configuration loader that reads from a project-relative config file with ENV variable fallback
   #
   # Priority order:
   # 1. Explicit values passed to constructor
   # 2. Environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
-  # 3. Config file (.llamero/config.yml in current working directory)
+  # 3. Config file in current working directory
   # 4. Default values
   #
   # The config file is relative to `Dir.current` (the directory where the binary runs),
   # making it easy to have different configurations per project.
   class ConfigLoader
     # Config file path relative to current working directory
-    CONFIG_FILE_PATH = Path[".llamero/config.yml"]
+    CONFIG_FILE_PATH = Path[Storage::DEFAULT_BASENAME].join("config.yml")
 
     # Provider credentials
     getter openai_api_key : String?
@@ -37,7 +38,7 @@ module Llamero
       default_provider : String? = nil,
       default_model : String? = nil,
       default_temperature : Float32? = nil,
-      default_max_tokens : Int32? = nil
+      default_max_tokens : Int32? = nil,
     )
       # Load config file if it exists
       config = load_config_file
@@ -59,11 +60,11 @@ module Llamero
     # Get API key for a specific provider
     def api_key_for(provider : String) : String?
       case provider.downcase
-      when "openai"    then @openai_api_key
-      when "anthropic" then @anthropic_api_key
-      when "groq"      then @groq_api_key
+      when "openai"     then @openai_api_key
+      when "anthropic"  then @anthropic_api_key
+      when "groq"       then @groq_api_key
       when "openrouter" then @openrouter_api_key
-      else nil
+      else                   nil
       end
     end
 

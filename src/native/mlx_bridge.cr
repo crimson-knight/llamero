@@ -1,4 +1,5 @@
 require "json"
+require "../config/storage"
 require "./bridge"
 
 module Llamero::Native
@@ -60,7 +61,7 @@ module Llamero::Native
     # 2. The in-repo Swift build products (native/llamero-mlx/.build/...)
     # 3. The shard's build products when llamero is a dependency
     #    (lib/llamero/native/llamero-mlx/.build/...)
-    # 4. ~/.llamero/lib/libLlameroMLXBridge.dylib (build.sh installs here)
+    # 4. Configured storage lib directory (build.sh installs here by default)
     # 5. /usr/local/lib/libLlameroMLXBridge.dylib
     def self.discover_library_path : String?
       if from_env = ENV["LLAMERO_MLX_LIB"]?
@@ -72,7 +73,7 @@ module Llamero::Native
         "native/llamero-mlx/.build/arm64-apple-macosx/release/libLlameroMLXBridge.dylib",
         "lib/llamero/native/llamero-mlx/.build/release/libLlameroMLXBridge.dylib",
         "lib/llamero/native/llamero-mlx/.build/arm64-apple-macosx/release/libLlameroMLXBridge.dylib",
-        Path.home.join(".llamero", "lib", "libLlameroMLXBridge.dylib").to_s,
+        Llamero::Storage.lib_dir.join("libLlameroMLXBridge.dylib").to_s,
         "/usr/local/lib/libLlameroMLXBridge.dylib",
       ].find { |candidate| File.exists?(candidate) }
     end

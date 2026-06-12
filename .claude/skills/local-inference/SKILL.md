@@ -24,13 +24,32 @@ stream, or structured call reuses it. No Python, no llama.cpp, no cloud API.
    ```
 
    `build.sh` installs `libLlameroMLXBridge.dylib` and `mlx.metallib` to
-   `~/.llamero/lib/`, where llamero finds them from any project. It requires
-   Xcode with the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`
-   if the build complains about a missing `metal` tool).
+   `$LLAMERO_HOME/lib` when set, otherwise `~/.llamero/lib/`, where llamero
+   finds them from any project. It requires Xcode with the Metal toolchain
+   (`xcodebuild -downloadComponent MetalToolchain` if the build complains
+   about a missing `metal` tool).
 3. Models download automatically from Hugging Face on first load into
-   `~/.llamero/models/`. The `mlx-community` conversions (including Gemma)
-   are generally ungated and need no token. Gated repos (e.g. `google/*`
-   originals) need `HF_TOKEN` set in the environment.
+   the configured storage root's `models/` directory. The `mlx-community`
+   conversions (including Gemma) are generally ungated and need no token.
+   Gated repos (e.g. `google/*` originals) need `HF_TOKEN` set in the
+   environment.
+
+## Storage root
+
+Default storage is `~/.llamero`. Apps that need app-owned AI data set this at
+boot before creating runtimes:
+
+```crystal
+Llamero.storage_root = Path.home.join(".scribe")
+```
+
+`LLAMERO_HOME=/path/to/root` is the env alternative; programmatic wins. The
+root controls local model downloads (`models/`), adapter artifacts
+(`adapters/`), bridge lookup (`lib/`), and audio model caches
+(`audio_models/`) when audio is configured. For app-owned bridge installs,
+set `LLAMERO_HOME` when running `build.sh`. FluidAudio 0.15.2 still pins
+English Kokoro G2P assets to its own TTS cache; see
+`development_docs/storage_configuration.md`.
 
 ## Recipe: minimal chat (complete program)
 
@@ -141,7 +160,7 @@ chat model — with the app routing each request by name.
 pool = Llamero::Native::ModelPool.new
 pool.add("specialist",
   model_id: "mlx-community/gemma-3-1b-it-4bit",
-  adapters: [{"llamero-docs", Path.home.join(".llamero", "adapters", "llamero-docs").to_s}],
+  adapters: [{"llamero-docs", Llamero::Storage.adapters_dir.join("llamero-docs").to_s}],
   default_stack: Llamero::Native::AdapterStack.additive([
     Llamero::Native::AdapterSlot.new("llamero-docs"),
   ])

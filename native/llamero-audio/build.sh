@@ -16,9 +16,11 @@ if [ ! -f "$DYLIB" ]; then
   exit 1
 fi
 
-# Install to ~/.llamero/lib so consuming projects find the bridge from any
-# working directory (AudioFFIBridge.discover_library_path checks there).
-INSTALL_DIR="$HOME/.llamero/lib"
+# Install to the configured storage root so consuming projects find the
+# bridge from any working directory (AudioFFIBridge.discover_library_path
+# checks this lib directory).
+INSTALL_ROOT="${LLAMERO_HOME:-$HOME/.llamero}"
+INSTALL_DIR="$INSTALL_ROOT/lib"
 mkdir -p "$INSTALL_DIR"
 cp "$DYLIB" "$INSTALL_DIR/libLlameroAudioBridge.dylib"
 

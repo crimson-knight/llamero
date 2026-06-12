@@ -1,4 +1,5 @@
 require "json"
+require "../config/storage"
 require "./audio_bridge"
 require "./mock_audio_bridge"
 require "./audio_events"
@@ -24,7 +25,7 @@ module Llamero::Native
       @duration_ms : Float64 = 0.0,
       @processing_time_ms : Float64 = 0.0,
       @confidence : Float64 = 0.0,
-      @language : String? = nil
+      @language : String? = nil,
     )
     end
   end
@@ -60,7 +61,7 @@ module Llamero::Native
       @asr_processing_time_ms : Float64 = 0.0,
       @diarization_processing_time_ms : Float64 = 0.0,
       @confidence : Float64 = 0.0,
-      @language : String? = nil
+      @language : String? = nil,
     )
     end
   end
@@ -79,7 +80,7 @@ module Llamero::Native
       @path : Path,
       @duration_ms : Float64,
       @synthesis_time_ms : Float64 = 0.0,
-      @sample_rate : Int32 = 0
+      @sample_rate : Int32 = 0,
     )
     end
   end
@@ -94,15 +95,15 @@ module Llamero::Native
   # models, the first speak loads the Kokoro chain. Progress streams to
   # `on_event` listeners.
   #
-  # ```crystal
+  # ```
   # audio = Llamero::Native::AudioRuntime.new
   #
   # result = audio.transcribe(Path["meeting.wav"])
-  # result.text       # full transcript
-  # result.segments   # word-level {text, start_ms, end_ms}
+  # result.text     # full transcript
+  # result.segments # word-level {text, start_ms, end_ms}
   #
   # spoken = audio.speak("I found three problems in that file.", voice: "af_heart")
-  # spoken.path       # wav file to play
+  # spoken.path # wav file to play
   #
   # # Streaming STT (live dictation): the app pushes mic samples,
   # # llamero streams text back. See AudioStream.
@@ -118,6 +119,9 @@ module Llamero::Native
     getter asr_model_version : String
     # Default Kokoro voice; per-call `voice:` overrides it.
     getter tts_voice : String?
+    # Optional FluidAudio model cache root. When nil, FluidAudio keeps its
+    # own defaults.
+    getter models_dir : Path?
     getter bridge : AudioBridge
 
     @runtime_handle : Int64
@@ -125,11 +129,14 @@ module Llamero::Native
     def initialize(
       @asr_model_version : String = "v3",
       @tts_voice : String? = nil,
-      @bridge : AudioBridge = AudioBridge.auto
+      models_dir : Path | String | Nil = nil,
+      @bridge : AudioBridge = AudioBridge.auto,
     )
       unless {"v2", "v3"}.includes?(@asr_model_version)
         raise ArgumentError.new("asr_model_version must be \"v2\" or \"v3\" (got #{@asr_model_version.inspect})")
       end
+      models_dir ||= Llamero::Storage.audio_models_dir if Llamero::Storage.configured?
+      @models_dir = models_dir ? Path[models_dir].expand : nil
       @event_listeners = [] of AudioEvent ->
       @streams = [] of AudioStream
       @closed = false
@@ -207,7 +214,7 @@ module Llamero::Native
       speaker_count : Int32? = nil,
       min_speakers : Int32? = nil,
       max_speakers : Int32? = nil,
-      clustering_threshold : Float64? = nil
+      clustering_threshold : Float64? = nil,
     ) : DiarizedTranscriptionResult
       ensure_open
       file_path = Path[path].expand
@@ -340,6 +347,7 @@ module Llamero::Native
         json.object do
           json.field "asr_model_version", @asr_model_version
           json.field "tts_voice", @tts_voice if @tts_voice
+          json.field "models_dir", @models_dir.to_s if @models_dir
         end
       end
     end
@@ -360,7 +368,7 @@ module Llamero::Native
       speaker_count : Int32?,
       min_speakers : Int32?,
       max_speakers : Int32?,
-      clustering_threshold : Float64?
+      clustering_threshold : Float64?,
     ) : String
       JSON.build do |json|
         json.object do
