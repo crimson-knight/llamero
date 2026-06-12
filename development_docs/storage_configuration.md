@@ -23,14 +23,17 @@ projects that want bridge dylibs under their own root should set
 `LLAMERO_HOME` while running `native/llamero-mlx/build.sh` or
 `native/llamero-audio/build.sh`.
 
-## FluidAudio 0.15.2 directory support
+## FluidAudio fork directory support
 
-Pinned source: `native/llamero-audio/Package.resolved` resolves
-`FluidInference/FluidAudio` revision
-`7f963cdc43ba89c5993654f1e138047d517a818d`.
+Pinned source: `native/llamero-audio/Package.swift` points at the
+`crimson-knight/FluidAudio` `configurable-storage-paths` branch, based on
+upstream `v0.15.2`.
 
 Supported and plumbed:
 
+- `FluidAudio.modelsDirectoryOverride` accepts one caller-owned model root.
+  The audio bridge sets it from the existing runtime JSON `models_dir`, which
+  llamero derives from `<storage_root>/audio_models` when storage is configured.
 - `AsrModels.downloadAndLoad(to:)` accepts a custom Parakeet model directory.
   llamero passes `<storage_root>/audio_models/<parakeet repo folder>` for the
   v2/v3 one-shot ASR path.
@@ -42,28 +45,15 @@ Supported and plumbed:
 - `KokoroAneManager(directory:)` accepts a custom directory for the main
   Kokoro ANE model chain and voice packs. llamero passes
   `<storage_root>/audio_models`.
+- The fork also routes Kokoro English G2P assets through the same directory:
+  `KokoroAneManager.initialize` passes its directory to
+  `KokoroAneResourceDownloader.ensureG2PAssets`, and `G2PModel.shared` loads
+  from that directory instead of a fixed TTS cache.
 
-Not cleanly supported:
-
-- English Kokoro text-to-speech still uses `G2PModel.shared` for text to IPA.
-  `G2PModel.loadIfNeeded` reads from
-  `TtsCacheDirectory.ensure()/Models/kokoro`, which is
-  `~/.cache/fluidaudio/Models/kokoro` on macOS. There is no public constructor,
-  directory setter, or env var for this singleton.
-- `KokoroAneManager.initialize` intentionally calls
-  `KokoroAneResourceDownloader.ensureG2PAssets(directory: nil)` because the
-  shared G2P singleton cannot see a caller-supplied directory. Passing the
-  custom directory there would download assets to the app root and still fail
-  when `G2PModel.shared` loads.
-
-Upgrade or patch needed for full audio relocation:
-
-1. FluidAudio should expose a configurable TTS cache root, or make
-   `G2PModel` injectable/configurable by URL.
-2. `KokoroAneManager` should pass its directory through to G2P asset download
-   and phonemization when the G2P model can honor that path.
-3. After that, `AudioRuntime` can guarantee that `speak` text synthesis uses
-   only `Llamero.storage_root/audio_models`.
+With a configured storage root, `AudioRuntime#transcribe`,
+`AudioRuntime#transcribe_diarized`, streaming ASR, and `AudioRuntime#speak`
+should only create or read FluidAudio model artifacts under
+`<storage_root>/audio_models`.
 
 Do not use symlinks as a workaround; they hide the ownership boundary and make
 app data cleanup ambiguous.

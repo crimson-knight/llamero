@@ -109,7 +109,10 @@ final class AudioRuntimeBox: @unchecked Sendable {
     private let eouCacheLock = NSLock()
     private var eouManagerCache: [String: StreamingEouAsrManager] = [:]
 
-    init(config: AudioRuntimeConfig) { self.config = config }
+    init(config: AudioRuntimeConfig) {
+        self.config = config
+        FluidAudio.modelsDirectoryOverride = modelsDirectory
+    }
 
     var asrVersion: AsrModelVersion {
         config.asrModelVersion == "v2" ? .v2 : .v3
@@ -121,7 +124,7 @@ final class AudioRuntimeBox: @unchecked Sendable {
         else {
             return nil
         }
-        return URL(fileURLWithPath: path, isDirectory: true)
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
     }
 
     func asrModelsDirectory(for version: AsrModelVersion) -> URL? {
