@@ -29,6 +29,42 @@ module Llamero::Native
     end
   end
 
+  # Result of a one-shot file transcription with speaker attribution.
+  struct DiarizedTranscriptionResult
+    # Full transcript text.
+    getter text : String
+    # Speaker-attributed transcript spans.
+    getter segments : Array(DiarizedTranscriptSegment)
+    # Raw ASR word-level segments used for alignment.
+    getter word_segments : Array(TranscriptSegment)
+    # Raw diarizer speaker activity windows before word alignment.
+    getter speaker_segments : Array(SpeakerSegment)
+    # Duration of the source audio.
+    getter duration_ms : Float64
+    # Total wall-clock time for ASR + diarization.
+    getter processing_time_ms : Float64
+    # Wall-clock ASR model processing time reported by FluidAudio.
+    getter asr_processing_time_ms : Float64
+    # Wall-clock diarizer processing time measured by the bridge.
+    getter diarization_processing_time_ms : Float64
+    getter confidence : Float64
+    getter language : String?
+
+    def initialize(
+      @text : String,
+      @segments : Array(DiarizedTranscriptSegment),
+      @word_segments : Array(TranscriptSegment),
+      @speaker_segments : Array(SpeakerSegment),
+      @duration_ms : Float64 = 0.0,
+      @processing_time_ms : Float64 = 0.0,
+      @asr_processing_time_ms : Float64 = 0.0,
+      @diarization_processing_time_ms : Float64 = 0.0,
+      @confidence : Float64 = 0.0,
+      @language : String? = nil
+    )
+    end
+  end
+
   # A synthesized speech artifact on disk.
   struct SpokenAudio
     # WAV file ready to play.
@@ -158,6 +194,63 @@ module Llamero::Native
       )
     end
 
+    # Transcribes an audio file and attributes the transcript to speakers.
+    # The bridge runs Parakeet ASR for text + word timestamps and
+    # FluidAudio's offline diarizer for speaker windows, then aligns words
+    # into `{speaker, start_ms, end_ms, text}` segments.
+    #
+    # `speaker_count` forces an exact number of speakers. `min_speakers` and
+    # `max_speakers` bound automatic clustering. `clustering_threshold`
+    # overrides FluidAudio's default VBx/AHC threshold.
+    def transcribe_diarized(
+      path : Path | String,
+      speaker_count : Int32? = nil,
+      min_speakers : Int32? = nil,
+      max_speakers : Int32? = nil,
+      clustering_threshold : Float64? = nil
+    ) : DiarizedTranscriptionResult
+      ensure_open
+      file_path = Path[path].expand
+      unless File.exists?(file_path)
+        raise DiarizationError.new("Audio file not found: #{file_path}")
+      end
+
+      error : AudioErrorEvent? = nil
+      transcript : DiarizedTranscriptFinalEvent? = nil
+
+      @bridge.transcribe_diarized_file(@runtime_handle, file_path.to_s, diarization_config_json(
+        speaker_count: speaker_count,
+        min_speakers: min_speakers,
+        max_speakers: max_speakers,
+        clustering_threshold: clustering_threshold
+      )) do |frame|
+        event = dispatch(frame)
+        case event
+        when DiarizedTranscriptFinalEvent then transcript = event
+        when AudioErrorEvent              then error = event
+        end
+      end
+
+      if failure = error
+        raise failure.to_error
+      end
+
+      final_transcript = transcript
+      final = final_transcript || raise DiarizationError.new("Bridge finished without a diarized_transcript_final event")
+      DiarizedTranscriptionResult.new(
+        text: final.text,
+        segments: final.segments,
+        word_segments: final.word_segments,
+        speaker_segments: final.speaker_segments,
+        duration_ms: final.duration_ms,
+        processing_time_ms: final.processing_time_ms,
+        asr_processing_time_ms: final.asr_processing_time_ms,
+        diarization_processing_time_ms: final.diarization_processing_time_ms,
+        confidence: final.confidence,
+        language: final.language
+      )
+    end
+
     # Synthesizes speech to a WAV file and returns its location. The first
     # call loads the Kokoro TTS chain (downloading it on first ever use).
     # Without `output_path` the bridge writes to a temporary file.
@@ -259,6 +352,22 @@ module Llamero::Native
           if output_path
             json.field "output_path", Path[output_path].expand.to_s
           end
+        end
+      end
+    end
+
+    private def diarization_config_json(
+      speaker_count : Int32?,
+      min_speakers : Int32?,
+      max_speakers : Int32?,
+      clustering_threshold : Float64?
+    ) : String
+      JSON.build do |json|
+        json.object do
+          json.field "speaker_count", speaker_count if speaker_count
+          json.field "min_speakers", min_speakers if min_speakers
+          json.field "max_speakers", max_speakers if max_speakers
+          json.field "clustering_threshold", clustering_threshold if clustering_threshold
         end
       end
     end

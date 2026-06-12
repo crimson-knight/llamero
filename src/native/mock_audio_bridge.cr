@@ -31,6 +31,7 @@ module Llamero::Native
     private class RuntimeState
       property config : JSON::Any
       property asr_loaded = false
+      property diarizer_loaded = false
       property tts_loaded = false
       # Streaming (Parakeet EOU) models are separate from the one-shot ASR
       # models and load lazily on a stream's first push.
@@ -76,6 +77,7 @@ module Llamero::Native
     # Failure knobs: set to true to make the next matching call emit an
     # error event (the knob resets automatically; the runtime stays usable).
     property fail_next_transcription = false
+    property fail_next_diarization = false
     property fail_next_speak = false
     property fail_next_stream_push = false
     property fail_next_stream_finish = false
@@ -141,6 +143,66 @@ module Llamero::Native
       emit(on_event, runtime, {
         "event" => "transcript_final", "text" => text, "segments" => segments,
         "duration_ms" => duration_ms, "processing_time_ms" => PROCESSING_TIME_MS,
+        "confidence" => 1.0,
+      })
+    end
+
+    def transcribe_diarized_file(runtime : Int64, path : String, config_json : String, &on_event : JSON::Any ->) : Nil
+      state = runtime_state(runtime)
+
+      if @fail_next_diarization
+        @fail_next_diarization = false
+        emit(on_event, runtime, {
+          "event" => "error", "message" => "Mock diarized transcription failure",
+          "code" => "diarization_failed", "recoverable" => true,
+        })
+        return
+      end
+
+      ensure_asr_loaded(state, runtime, on_event)
+      ensure_diarizer_loaded(state, runtime, on_event)
+
+      text = @scripted_transcripts.shift? || "mock diarized transcript of #{File.basename(path)}"
+      words = text.split
+      word_segments = words.map_with_index do |word, index|
+        start_ms = index * WORD_SPACING_MS
+        {"text" => word, "start_ms" => start_ms, "end_ms" => start_ms + WORD_LENGTH_MS}
+      end
+      duration_ms = word_segments.last?.try(&.["end_ms"].as(Float64)) || 0.0
+
+      split_index = Math.max(1, (words.size / 2.0).ceil.to_i)
+      first_words = words[0, split_index]
+      second_words = words[split_index, words.size - split_index]
+
+      diarized_segments = [] of Hash(String, String | Float64)
+      speaker_segments = [] of Hash(String, String | Float64)
+      unless first_words.empty?
+        first_end_ms = (split_index - 1) * WORD_SPACING_MS + WORD_LENGTH_MS
+        diarized_segments << {
+          "speaker" => "S1", "start_ms" => 0.0, "end_ms" => first_end_ms,
+          "text" => first_words.join(" "),
+        }
+        speaker_segments << {"speaker" => "S1", "start_ms" => 0.0, "end_ms" => first_end_ms}
+      end
+      unless second_words.empty?
+        second_start_ms = split_index * WORD_SPACING_MS
+        diarized_segments << {
+          "speaker" => "S2", "start_ms" => second_start_ms, "end_ms" => duration_ms,
+          "text" => second_words.join(" "),
+        }
+        speaker_segments << {"speaker" => "S2", "start_ms" => second_start_ms, "end_ms" => duration_ms}
+      end
+
+      emit(on_event, runtime, {
+        "event" => "diarized_transcript_final",
+        "text" => text,
+        "segments" => diarized_segments,
+        "word_segments" => word_segments,
+        "speaker_segments" => speaker_segments,
+        "duration_ms" => duration_ms,
+        "processing_time_ms" => PROCESSING_TIME_MS * 2,
+        "asr_processing_time_ms" => PROCESSING_TIME_MS,
+        "diarization_processing_time_ms" => PROCESSING_TIME_MS,
         "confidence" => 1.0,
       })
     end
@@ -279,6 +341,10 @@ module Llamero::Native
       runtime_state(runtime).asr_loaded
     end
 
+    def diarizer_loaded?(runtime : Int64) : Bool
+      runtime_state(runtime).diarizer_loaded
+    end
+
     def stream_asr_loaded?(runtime : Int64) : Bool
       runtime_state(runtime).stream_asr_loaded
     end
@@ -310,6 +376,31 @@ module Llamero::Native
         "load_time_ms" => ASR_LOAD_TIME_MS,
       })
       runtime.stream_asr_loaded = true
+    end
+
+    private def ensure_asr_loaded(state : RuntimeState, runtime : Int64, on_event : JSON::Any ->) : Nil
+      return if state.asr_loaded
+
+      version = state.config["asr_model_version"]?.try(&.as_s) || "v3"
+      emit(on_event, runtime, {"event" => "asr_model_load_started", "model_version" => version})
+      emit(on_event, runtime, {"event" => "asr_model_load_progress", "progress" => 1.0})
+      emit(on_event, runtime, {
+        "event" => "asr_model_loaded", "model_version" => version,
+        "load_time_ms" => ASR_LOAD_TIME_MS,
+      })
+      state.asr_loaded = true
+    end
+
+    private def ensure_diarizer_loaded(state : RuntimeState, runtime : Int64, on_event : JSON::Any ->) : Nil
+      return if state.diarizer_loaded
+
+      emit(on_event, runtime, {"event" => "diarizer_model_load_started", "model_version" => "offline-vbx"})
+      emit(on_event, runtime, {"event" => "diarizer_model_load_progress", "progress" => 1.0})
+      emit(on_event, runtime, {
+        "event" => "diarizer_model_loaded", "model_version" => "offline-vbx",
+        "load_time_ms" => ASR_LOAD_TIME_MS,
+      })
+      state.diarizer_loaded = true
     end
 
     private def complete_utterance(state : StreamState, text : String, stream : Int64, on_event : JSON::Any ->) : Nil

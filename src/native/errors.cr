@@ -139,6 +139,15 @@ module Llamero::Native
     end
   end
 
+  # Speaker diarization or speaker-attributed transcription failed. The
+  # runtime stays usable; retry with a valid speech file or different
+  # diarization config.
+  class DiarizationError < AudioError
+    def initialize(message : String)
+      super(message, "diarization_failed", recoverable: true)
+    end
+  end
+
   # Text-to-speech failed (empty text, model download or load failure, or a
   # synthesis error). The runtime stays usable.
   class SpeechSynthesisError < AudioError

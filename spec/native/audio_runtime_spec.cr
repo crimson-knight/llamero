@@ -94,6 +94,66 @@ describe Llamero::Native::AudioRuntime do
     end
   end
 
+  describe "#transcribe_diarized" do
+    it "returns speaker-attributed transcript segments" do
+      runtime, bridge = mock_audio_runtime
+      bridge.scripted_transcripts << "alice opens the meeting bob shares notes"
+
+      with_temp_wav do |path|
+        result = runtime.transcribe_diarized(path, speaker_count: 2)
+
+        result.text.should eq("alice opens the meeting bob shares notes")
+        result.segments.size.should eq(2)
+        result.segments[0].speaker.should eq("S1")
+        result.segments[0].text.should eq("alice opens the meeting")
+        result.segments[1].speaker.should eq("S2")
+        result.segments[1].text.should eq("bob shares notes")
+        result.word_segments.size.should eq(result.text.split.size)
+        result.speaker_segments.map(&.speaker).should eq(["S1", "S2"])
+        result.duration_ms.should eq(result.word_segments.last.end_ms)
+        result.processing_time_ms.should be > 0
+        result.asr_processing_time_ms.should be > 0
+        result.diarization_processing_time_ms.should be > 0
+      end
+    end
+
+    it "loads ASR and diarizer models lazily and only once per runtime" do
+      runtime, _bridge = mock_audio_runtime
+      events = [] of Llamero::Native::AudioEvent
+      runtime.on_event { |event| events << event }
+
+      with_temp_wav do |path|
+        runtime.transcribe_diarized(path)
+        runtime.transcribe_diarized(path)
+      end
+
+      events.count(&.is_a?(Llamero::Native::AsrModelLoadStartedEvent)).should eq(1)
+      events.count(&.is_a?(Llamero::Native::DiarizerModelLoadStartedEvent)).should eq(1)
+      events.count(&.is_a?(Llamero::Native::DiarizedTranscriptFinalEvent)).should eq(2)
+    end
+
+    it "fails fast on missing audio files" do
+      runtime, _bridge = mock_audio_runtime
+
+      expect_raises(Llamero::Native::DiarizationError, /not found/) do
+        runtime.transcribe_diarized("/nonexistent/audio.wav")
+      end
+    end
+
+    it "raises on a scripted failure but keeps the runtime usable" do
+      runtime, bridge = mock_audio_runtime
+      bridge.fail_next_diarization = true
+
+      with_temp_wav do |path|
+        expect_raises(Llamero::Native::DiarizationError, /Mock diarized transcription failure/) do
+          runtime.transcribe_diarized(path)
+        end
+
+        runtime.transcribe_diarized(path).text.should eq("mock diarized transcript of #{File.basename(path)}")
+      end
+    end
+  end
+
   describe "#speak" do
     it "writes a playable WAV file at the requested path" do
       runtime, _bridge = mock_audio_runtime

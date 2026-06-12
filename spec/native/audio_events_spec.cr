@@ -50,6 +50,68 @@ describe Llamero::Native::AudioEvent do
     loaded.as(Llamero::Native::AsrModelLoadedEvent).load_time_ms.should eq(1234.0)
   end
 
+  it "parses diarizer model lifecycle and progress frames" do
+    started = Llamero::Native::AudioEvent.from_bridge_json(
+      {"event" => "diarizer_model_load_started", "model_version" => "offline-vbx"}.to_json
+    )
+    started.should be_a(Llamero::Native::DiarizerModelLoadStartedEvent)
+    started.as(Llamero::Native::DiarizerModelLoadStartedEvent).model_version.should eq("offline-vbx")
+
+    progress = Llamero::Native::AudioEvent.from_bridge_json(
+      {"event" => "diarizer_model_load_progress", "progress" => 0.75}.to_json
+    )
+    progress.as(Llamero::Native::DiarizerModelLoadProgressEvent).progress.should eq(0.75)
+
+    loaded = Llamero::Native::AudioEvent.from_bridge_json(
+      {"event" => "diarizer_model_loaded", "model_version" => "offline-vbx", "load_time_ms" => 321.0}.to_json
+    )
+    loaded.as(Llamero::Native::DiarizerModelLoadedEvent).load_time_ms.should eq(321.0)
+
+    diarization_progress = Llamero::Native::AudioEvent.from_bridge_json(
+      {"event" => "diarization_progress", "progress" => 0.5, "chunks_processed" => 2, "total_chunks" => 4}.to_json
+    ).as(Llamero::Native::DiarizationProgressEvent)
+    diarization_progress.progress.should eq(0.5)
+    diarization_progress.chunks_processed.should eq(2)
+    diarization_progress.total_chunks.should eq(4)
+  end
+
+  it "parses diarized_transcript_final frames" do
+    event = Llamero::Native::AudioEvent.from_bridge_json({
+      "event"                           => "diarized_transcript_final",
+      "session_id"                      => "audio-runtime-1",
+      "created_at"                      => "2026-06-11T12:00:00Z",
+      "text"                            => "hello world again",
+      "segments"                        => [
+        {"speaker" => "S1", "text" => "hello world", "start_ms" => 0.0, "end_ms" => 900.0},
+        {"speaker" => "S2", "text" => "again", "start_ms" => 1000.0, "end_ms" => 1300.0},
+      ],
+      "word_segments"                   => [
+        {"text" => "hello", "start_ms" => 0.0, "end_ms" => 300.0},
+        {"text" => "world", "start_ms" => 500.0, "end_ms" => 900.0},
+        {"text" => "again", "start_ms" => 1000.0, "end_ms" => 1300.0},
+      ],
+      "speaker_segments"                => [
+        {"speaker" => "S1", "start_ms" => 0.0, "end_ms" => 900.0},
+        {"speaker" => "S2", "start_ms" => 1000.0, "end_ms" => 1300.0},
+      ],
+      "duration_ms"                     => 1300.0,
+      "processing_time_ms"              => 80.0,
+      "asr_processing_time_ms"          => 25.0,
+      "diarization_processing_time_ms"  => 55.0,
+      "confidence"                      => 0.98,
+    }.to_json).as(Llamero::Native::DiarizedTranscriptFinalEvent)
+
+    event.text.should eq("hello world again")
+    event.segments.size.should eq(2)
+    event.segments[0].speaker.should eq("S1")
+    event.segments[0].text.should eq("hello world")
+    event.segments[1].speaker.should eq("S2")
+    event.word_segments.size.should eq(3)
+    event.speaker_segments[1].start_ms.should eq(1000.0)
+    event.asr_processing_time_ms.should eq(25.0)
+    event.diarization_processing_time_ms.should eq(55.0)
+  end
+
   it "parses speak_completed frames" do
     event = Llamero::Native::AudioEvent.from_bridge_json({
       "event"             => "speak_completed",
@@ -87,6 +149,12 @@ describe Llamero::Native::AudioEvent do
     }.to_json).as(Llamero::Native::AudioErrorEvent)
     other_error.to_error.class.should eq(Llamero::Native::AudioError)
     other_error.to_error.code.should eq("something_else")
+
+    diarization_error = Llamero::Native::AudioEvent.from_bridge_json({
+      "event" => "error", "message" => "no speakers",
+      "code" => "diarization_failed", "recoverable" => true,
+    }.to_json).as(Llamero::Native::AudioErrorEvent)
+    diarization_error.to_error.should be_a(Llamero::Native::DiarizationError)
   end
 
   it "surfaces unrecognized frames as UnknownAudioEvent" do

@@ -20,6 +20,44 @@ module Llamero::Native
     end
   end
 
+  # One speaker-attributed transcript span.
+  struct DiarizedTranscriptSegment
+    getter speaker : String
+    getter text : String
+    getter start_ms : Float64
+    getter end_ms : Float64
+
+    def initialize(@speaker : String, @text : String, @start_ms : Float64, @end_ms : Float64)
+    end
+
+    def self.from_json_any(raw : JSON::Any) : DiarizedTranscriptSegment
+      new(
+        speaker: raw["speaker"]?.try(&.as_s) || "S1",
+        text: raw["text"]?.try(&.as_s) || "",
+        start_ms: raw["start_ms"]?.try(&.as_f) || 0.0,
+        end_ms: raw["end_ms"]?.try(&.as_f) || 0.0
+      )
+    end
+  end
+
+  # One diarizer-only speaker activity span, before ASR word alignment.
+  struct SpeakerSegment
+    getter speaker : String
+    getter start_ms : Float64
+    getter end_ms : Float64
+
+    def initialize(@speaker : String, @start_ms : Float64, @end_ms : Float64)
+    end
+
+    def self.from_json_any(raw : JSON::Any) : SpeakerSegment
+      new(
+        speaker: raw["speaker"]?.try(&.as_s) || "S1",
+        start_ms: raw["start_ms"]?.try(&.as_f) || 0.0,
+        end_ms: raw["end_ms"]?.try(&.as_f) || 0.0
+      )
+    end
+  end
+
   # Typed events produced by an audio bridge (speech-to-text and
   # text-to-speech). The bridge boundary speaks JSON (one object per event);
   # this layer parses those frames into Crystal types, mirroring the
@@ -43,11 +81,16 @@ module Llamero::Native
       when "asr_model_load_started"  then AsrModelLoadStartedEvent.new(raw)
       when "asr_model_load_progress" then AsrModelLoadProgressEvent.new(raw)
       when "asr_model_loaded"        then AsrModelLoadedEvent.new(raw)
+      when "diarizer_model_load_started"  then DiarizerModelLoadStartedEvent.new(raw)
+      when "diarizer_model_load_progress" then DiarizerModelLoadProgressEvent.new(raw)
+      when "diarizer_model_loaded"        then DiarizerModelLoadedEvent.new(raw)
+      when "diarization_progress"         then DiarizationProgressEvent.new(raw)
       when "tts_model_load_started"  then TtsModelLoadStartedEvent.new(raw)
       when "tts_model_loaded"        then TtsModelLoadedEvent.new(raw)
       when "transcript_partial"      then TranscriptPartialEvent.new(raw)
       when "utterance_end"           then UtteranceEndEvent.new(raw)
       when "transcript_final"        then TranscriptFinalEvent.new(raw)
+      when "diarized_transcript_final" then DiarizedTranscriptFinalEvent.new(raw)
       when "speak_completed"         then SpeakCompletedEvent.new(raw)
       when "error"                   then AudioErrorEvent.new(raw)
       else                                UnknownAudioEvent.new(raw)
@@ -89,6 +132,54 @@ module Llamero::Native
       super(raw)
       @model_version = raw["model_version"]?.try(&.as_s) || "v3"
       @load_time_ms = raw["load_time_ms"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # Offline diarizer models started loading (first diarized transcription on
+  # a runtime; the first ever load also downloads CoreML bundles).
+  struct DiarizerModelLoadStartedEvent < AudioEvent
+    getter model_version : String
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @model_version = raw["model_version"]?.try(&.as_s) || "offline-vbx"
+    end
+  end
+
+  # Download/compile progress while the offline diarizer models load.
+  struct DiarizerModelLoadProgressEvent < AudioEvent
+    getter progress : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @progress = raw["progress"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # Offline diarizer models are resident and ready to process files.
+  struct DiarizerModelLoadedEvent < AudioEvent
+    getter model_version : String
+    getter load_time_ms : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @model_version = raw["model_version"]?.try(&.as_s) || "offline-vbx"
+      @load_time_ms = raw["load_time_ms"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # Progress from FluidAudio's offline diarizer while it walks segmentation
+  # chunks. This can fire during long meeting files.
+  struct DiarizationProgressEvent < AudioEvent
+    getter progress : Float64
+    getter chunks_processed : Int32
+    getter total_chunks : Int32
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @progress = raw["progress"]?.try(&.as_f) || 0.0
+      @chunks_processed = raw["chunks_processed"]?.try(&.as_i) || 0
+      @total_chunks = raw["total_chunks"]?.try(&.as_i) || 0
     end
   end
 
@@ -159,6 +250,36 @@ module Llamero::Native
     end
   end
 
+  # Final transcript with speaker-attributed segments. The bridge also
+  # includes `word_segments` (raw ASR word timestamps) and `speaker_segments`
+  # (raw diarizer activity windows) so callers can inspect or realign.
+  struct DiarizedTranscriptFinalEvent < AudioEvent
+    getter text : String
+    getter segments : Array(DiarizedTranscriptSegment)
+    getter word_segments : Array(TranscriptSegment)
+    getter speaker_segments : Array(SpeakerSegment)
+    getter duration_ms : Float64
+    getter processing_time_ms : Float64
+    getter asr_processing_time_ms : Float64
+    getter diarization_processing_time_ms : Float64
+    getter confidence : Float64
+    getter language : String?
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @text = raw["text"]?.try(&.as_s) || ""
+      @segments = raw["segments"]?.try(&.as_a.map { |segment| DiarizedTranscriptSegment.from_json_any(segment) }) || [] of DiarizedTranscriptSegment
+      @word_segments = raw["word_segments"]?.try(&.as_a.map { |segment| TranscriptSegment.from_json_any(segment) }) || [] of TranscriptSegment
+      @speaker_segments = raw["speaker_segments"]?.try(&.as_a.map { |segment| SpeakerSegment.from_json_any(segment) }) || [] of SpeakerSegment
+      @duration_ms = raw["duration_ms"]?.try(&.as_f) || 0.0
+      @processing_time_ms = raw["processing_time_ms"]?.try(&.as_f) || 0.0
+      @asr_processing_time_ms = raw["asr_processing_time_ms"]?.try(&.as_f) || 0.0
+      @diarization_processing_time_ms = raw["diarization_processing_time_ms"]?.try(&.as_f) || 0.0
+      @confidence = raw["confidence"]?.try(&.as_f) || 0.0
+      @language = raw["language"]?.try(&.as_s)
+    end
+  end
+
   # Text-to-speech finished and the WAV file was written.
   struct SpeakCompletedEvent < AudioEvent
     getter path : String
@@ -194,6 +315,7 @@ module Llamero::Native
     def to_error : AudioError
       case @code
       when "transcription_failed", "stream_failed" then TranscriptionError.new(@message)
+      when "diarization_failed"                    then DiarizationError.new(@message)
       when "speak_failed"                          then SpeechSynthesisError.new(@message)
       else
         AudioError.new(@message, @code, @recoverable)

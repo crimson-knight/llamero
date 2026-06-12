@@ -42,6 +42,13 @@ module Llamero::Native
     # transcript_final, or error). Request JSON: {"path": "/abs/file.wav"}.
     abstract def transcribe_file(runtime : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
 
+    # One-shot file transcription with speaker diarization. Runs Parakeet ASR
+    # for word timestamps and FluidAudio's offline diarizer for speaker
+    # segments, then yields diarized_transcript_final with speaker-attributed
+    # transcript segments. Config JSON supports optional clustering_threshold,
+    # speaker_count, min_speakers, and max_speakers.
+    abstract def transcribe_diarized_file(runtime : Int64, path : String, config_json : String, &on_event : JSON::Any ->) : Nil
+
     # Text-to-speech to a WAV file, yielding event frames
     # (tts_model_load_started/loaded on first use, then speak_completed with
     # the output path, or error). Request JSON: {"text": "...", "voice":
@@ -82,6 +89,7 @@ module Llamero::Native
   # int64_t llamero_audio_runtime_create(const char *json_config); // > 0 handle, <= 0 failure
   # void    llamero_audio_runtime_free(int64_t runtime);
   # int32_t llamero_audio_transcribe_file(int64_t runtime, const char *json_request, llamero_event_callback cb, void *user_data);
+  # int32_t llamero_audio_runtime_transcribe_diarized(int64_t runtime, const char *path, const char *config_json, llamero_event_callback cb, void *user_data);
   # int32_t llamero_audio_speak(int64_t runtime, const char *json_request, llamero_event_callback cb, void *user_data);
   #
   # // Streaming STT. samples are 16kHz mono Float32 PCM; count is in samples.
@@ -109,6 +117,7 @@ module Llamero::Native
     @runtime_create : Proc(LibC::Char*, Int64)
     @runtime_free : Proc(Int64, Nil)
     @transcribe_file : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
+    @transcribe_diarized_file : Proc(Int64, LibC::Char*, LibC::Char*, Void*, Void*, Int32)
     @speak : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @stream_create : Proc(Int64, LibC::Char*, Int64)
     @stream_push : Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32)
@@ -162,6 +171,7 @@ module Llamero::Native
       @runtime_create = Proc(LibC::Char*, Int64).new(symbol("llamero_audio_runtime_create"), Pointer(Void).null)
       @runtime_free = Proc(Int64, Nil).new(symbol("llamero_audio_runtime_free"), Pointer(Void).null)
       @transcribe_file = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_transcribe_file"), Pointer(Void).null)
+      @transcribe_diarized_file = Proc(Int64, LibC::Char*, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_runtime_transcribe_diarized"), Pointer(Void).null)
       @speak = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_speak"), Pointer(Void).null)
       @stream_create = Proc(Int64, LibC::Char*, Int64).new(symbol("llamero_audio_stream_create"), Pointer(Void).null)
       @stream_push = Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32).new(symbol("llamero_audio_stream_push"), Pointer(Void).null)
@@ -192,6 +202,12 @@ module Llamero::Native
     def transcribe_file(runtime : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
       with_events(on_event) do |callback, user_data|
         @transcribe_file.call(runtime, request_json.to_unsafe, callback, user_data)
+      end
+    end
+
+    def transcribe_diarized_file(runtime : Int64, path : String, config_json : String, &on_event : JSON::Any ->) : Nil
+      with_events(on_event) do |callback, user_data|
+        @transcribe_diarized_file.call(runtime, path.to_unsafe, config_json.to_unsafe, callback, user_data)
       end
     end
 

@@ -41,6 +41,20 @@ struct TranscribeRequest: Codable {
     var path: String
 }
 
+struct DiarizedTranscribeConfig: Codable {
+    var clusteringThreshold: Double?
+    var minSpeakers: Int?
+    var maxSpeakers: Int?
+    var speakerCount: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case clusteringThreshold = "clustering_threshold"
+        case minSpeakers = "min_speakers"
+        case maxSpeakers = "max_speakers"
+        case speakerCount = "speaker_count"
+    }
+}
+
 struct StreamConfig: Codable {
     /// Streaming chunk size in ms: 160 (default, lowest latency), 320, or
     /// 1280 (highest throughput). Each maps to a separately exported CoreML
@@ -83,6 +97,7 @@ final class AudioRuntimeBox: @unchecked Sendable {
     // bridge's SessionBox.
     var asrManager: AsrManager?
     var asrDecoderLayers: Int = 2
+    var offlineDiarizerModels: OfflineDiarizerModels?
     var tts: KokoroAneManager?
 
     // Streaming EOU managers are expensive to load, so freed streams park
@@ -367,6 +382,45 @@ private func ensureAsrManager(_ runtime: AudioRuntimeBox, sink: EventSink) async
     return manager
 }
 
+/// Loads the offline diarization CoreML bundles on first use. The models are
+/// parked on the runtime and reused by future diarized transcriptions; each
+/// call creates a fresh OfflineDiarizerManager around the resident models so
+/// per-call clustering/speaker-count config can vary without reloading.
+private func ensureOfflineDiarizerModels(_ runtime: AudioRuntimeBox, sink: EventSink) async throws
+    -> OfflineDiarizerModels
+{
+    if let models = runtime.offlineDiarizerModels {
+        return models
+    }
+
+    sink.emit([
+        "event": "diarizer_model_load_started",
+        "model_version": "offline-vbx",
+    ])
+    let start = Date()
+
+    let throttle = ProgressThrottle()
+    let models = try await OfflineDiarizerModels.load(
+        progressHandler: { progress in
+            let fraction = progress.fractionCompleted
+            if throttle.shouldReport(fraction) {
+                sink.emit([
+                    "event": "diarizer_model_load_progress",
+                    "progress": fraction,
+                ])
+            }
+        }
+    )
+
+    runtime.offlineDiarizerModels = models
+    sink.emit([
+        "event": "diarizer_model_loaded",
+        "model_version": "offline-vbx",
+        "load_time_ms": Date().timeIntervalSince(start) * 1000,
+    ])
+    return models
+}
+
 /// Loads the Kokoro TTS chain on first use, emitting progress events.
 private func ensureTts(_ runtime: AudioRuntimeBox, sink: EventSink) async throws -> KokoroAneManager {
     if let tts = runtime.tts {
@@ -389,11 +443,19 @@ private func ensureTts(_ runtime: AudioRuntimeBox, sink: EventSink) async throws
 
 // MARK: - Transcript segments
 
+private struct WordSpan {
+    let text: String
+    let startMs: Double
+    let endMs: Double
+
+    var midpointMs: Double { (startMs + endMs) / 2 }
+}
+
 /// Groups Parakeet's subword token timings into word-level segments
 /// ({text, start_ms, end_ms}). Tokens use the SentencePiece word-boundary
 /// marker; a token starting a new word flushes the previous one.
-private func wordSegments(from timings: [TokenTiming]) -> [[String: Any]] {
-    var segments: [[String: Any]] = []
+private func wordSpans(from timings: [TokenTiming]) -> [WordSpan] {
+    var segments: [WordSpan] = []
     var currentText = ""
     var start: TimeInterval = 0
     var end: TimeInterval = 0
@@ -401,11 +463,7 @@ private func wordSegments(from timings: [TokenTiming]) -> [[String: Any]] {
     func flush() {
         let trimmed = currentText.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
-        segments.append([
-            "text": trimmed,
-            "start_ms": start * 1000,
-            "end_ms": end * 1000,
-        ])
+        segments.append(WordSpan(text: trimmed, startMs: start * 1000, endMs: end * 1000))
     }
 
     for timing in timings {
@@ -421,6 +479,129 @@ private func wordSegments(from timings: [TokenTiming]) -> [[String: Any]] {
         end = timing.endTime
     }
     flush()
+    return segments
+}
+
+private func wordSegments(from timings: [TokenTiming]) -> [[String: Any]] {
+    wordSpans(from: timings).map { word in
+        [
+            "text": word.text,
+            "start_ms": word.startMs,
+            "end_ms": word.endMs,
+        ]
+    }
+}
+
+private func wordSegments(from spans: [WordSpan]) -> [[String: Any]] {
+    spans.map { word in
+        [
+            "text": word.text,
+            "start_ms": word.startMs,
+            "end_ms": word.endMs,
+        ]
+    }
+}
+
+private func diarizerConfig(from config: DiarizedTranscribeConfig) -> OfflineDiarizerConfig {
+    var diarizerConfig = OfflineDiarizerConfig.default
+    if let threshold = config.clusteringThreshold {
+        diarizerConfig.clustering.threshold = threshold
+    }
+    if let count = config.speakerCount {
+        diarizerConfig.clustering.numSpeakers = count
+    }
+    if let minSpeakers = config.minSpeakers {
+        diarizerConfig.clustering.minSpeakers = minSpeakers
+    }
+    if let maxSpeakers = config.maxSpeakers {
+        diarizerConfig.clustering.maxSpeakers = maxSpeakers
+    }
+    return diarizerConfig
+}
+
+private func attributedSegments(
+    words: [WordSpan],
+    diarizationSegments: [TimedSpeakerSegment],
+    fallbackText: String,
+    durationMs: Double
+) -> [[String: Any]] {
+    let sortedDiarization = diarizationSegments.sorted {
+        if $0.startTimeSeconds == $1.startTimeSeconds {
+            return $0.endTimeSeconds < $1.endTimeSeconds
+        }
+        return $0.startTimeSeconds < $1.startTimeSeconds
+    }
+
+    guard !sortedDiarization.isEmpty else {
+        return fallbackText.isEmpty
+            ? []
+            : [[
+                "speaker": "S1",
+                "start_ms": words.first?.startMs ?? 0.0,
+                "end_ms": max(durationMs, words.last?.endMs ?? 0.0),
+                "text": fallbackText,
+            ]]
+    }
+
+    guard !words.isEmpty else {
+        return fallbackText.isEmpty
+            ? []
+            : [[
+                "speaker": "S1",
+                "start_ms": 0.0,
+                "end_ms": durationMs,
+                "text": fallbackText,
+            ]]
+    }
+
+    var wordsByDiarizationIndex: [Int: [WordSpan]] = [:]
+    for word in words {
+        var bestIndex = 0
+        var bestDistance = Double.greatestFiniteMagnitude
+        for (index, diarized) in sortedDiarization.enumerated() {
+            let startMs = Double(diarized.startTimeSeconds) * 1000
+            let endMs = Double(diarized.endTimeSeconds) * 1000
+            let distance: Double
+            if word.midpointMs >= startMs && word.midpointMs <= endMs {
+                distance = 0
+            } else if word.midpointMs < startMs {
+                distance = startMs - word.midpointMs
+            } else {
+                distance = word.midpointMs - endMs
+            }
+            if distance < bestDistance {
+                bestDistance = distance
+                bestIndex = index
+            }
+        }
+        wordsByDiarizationIndex[bestIndex, default: []].append(word)
+    }
+
+    var segments: [[String: Any]] = []
+    for (index, diarized) in sortedDiarization.enumerated() {
+        let startMs = Double(diarized.startTimeSeconds) * 1000
+        let endMs = Double(diarized.endTimeSeconds) * 1000
+        let matchingWords = wordsByDiarizationIndex[index] ?? []
+        guard !matchingWords.isEmpty else { continue }
+
+        let text = matchingWords.map(\.text).joined(separator: " ")
+        segments.append([
+            "speaker": diarized.speakerId,
+            "start_ms": min(startMs, matchingWords.first?.startMs ?? startMs),
+            "end_ms": max(endMs, matchingWords.last?.endMs ?? endMs),
+            "text": text,
+        ])
+    }
+
+    if segments.isEmpty && !fallbackText.isEmpty {
+        segments.append([
+            "speaker": "S1",
+            "start_ms": 0.0,
+            "end_ms": durationMs,
+            "text": fallbackText,
+        ])
+    }
+
     return segments
 }
 
@@ -502,6 +683,125 @@ public func llamero_audio_transcribe_file(
             sink.fail(
                 message: "Transcription failed: \(error)",
                 code: "transcription_failed",
+                recoverable: true
+            )
+        }
+    }
+
+    return sink.drain(callback: callback, userData: userData)
+}
+
+@_cdecl("llamero_audio_runtime_transcribe_diarized")
+public func llamero_audio_runtime_transcribe_diarized(
+    _ handle: Int64,
+    _ pathCString: UnsafePointer<CChar>?,
+    _ configJson: UnsafePointer<CChar>?,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let runtime = AudioBridgeRegistry.shared.runtime(handle) else { return 2 }
+    guard let pathCString else { return 3 }
+
+    let path = String(cString: pathCString)
+    let config: DiarizedTranscribeConfig
+    if let configJson {
+        guard let data = String(cString: configJson).data(using: .utf8),
+            let decoded = try? JSONDecoder().decode(DiarizedTranscribeConfig.self, from: data)
+        else { return 3 }
+        config = decoded
+    } else {
+        config = DiarizedTranscribeConfig()
+    }
+
+    let sink = EventSink(sessionId: "audio-runtime-\(handle)")
+
+    Task.detached {
+        do {
+            guard FileManager.default.fileExists(atPath: path) else {
+                throw AudioBridgeError(message: "Audio file not found: \(path)")
+            }
+
+            let totalStart = Date()
+
+            let asrManager = try await ensureAsrManager(runtime, sink: sink)
+            var decoderState = TdtDecoderState.make(decoderLayers: runtime.asrDecoderLayers)
+            let asrResult = try await asrManager.transcribe(
+                URL(fileURLWithPath: path), decoderState: &decoderState)
+
+            let wordsFromTimings = wordSpans(from: asrResult.tokenTimings ?? [])
+            let words: [WordSpan]
+            if wordsFromTimings.isEmpty && !asrResult.text.isEmpty {
+                words = [
+                    WordSpan(
+                        text: asrResult.text,
+                        startMs: 0,
+                        endMs: asrResult.duration * 1000
+                    )
+                ]
+            } else {
+                words = wordsFromTimings
+            }
+
+            let diarizerModels = try await ensureOfflineDiarizerModels(runtime, sink: sink)
+            let diarizationConfig = diarizerConfig(from: config)
+            let diarizer = OfflineDiarizerManager(config: diarizationConfig)
+            diarizer.initialize(models: diarizerModels)
+
+            let diarizationStart = Date()
+            let diarization = try await diarizer.process(URL(fileURLWithPath: path)) {
+                chunksProcessed, totalChunks in
+                let progress = totalChunks > 0 ? Double(chunksProcessed) / Double(totalChunks) : 1.0
+                sink.emit([
+                    "event": "diarization_progress",
+                    "progress": progress,
+                    "chunks_processed": chunksProcessed,
+                    "total_chunks": totalChunks,
+                ])
+            }
+            let diarizationProcessingMs = Date().timeIntervalSince(diarizationStart) * 1000
+            let speakerDurationMs =
+                diarization.segments.map { Double($0.endTimeSeconds) * 1000 }.max() ?? 0
+            let durationMs = max(asrResult.duration * 1000, words.last?.endMs ?? 0, speakerDurationMs)
+
+            let speakerSegments = attributedSegments(
+                words: words,
+                diarizationSegments: diarization.segments,
+                fallbackText: asrResult.text,
+                durationMs: durationMs
+            )
+
+            let rawSpeakerSegments = diarization.segments
+                .sorted {
+                    if $0.startTimeSeconds == $1.startTimeSeconds {
+                        return $0.endTimeSeconds < $1.endTimeSeconds
+                    }
+                    return $0.startTimeSeconds < $1.startTimeSeconds
+                }
+                .map { segment in
+                    [
+                        "speaker": segment.speakerId,
+                        "start_ms": Double(segment.startTimeSeconds) * 1000,
+                        "end_ms": Double(segment.endTimeSeconds) * 1000,
+                    ] as [String: Any]
+                }
+
+            sink.emit([
+                "event": "diarized_transcript_final",
+                "text": asrResult.text,
+                "segments": speakerSegments,
+                "word_segments": wordSegments(from: words),
+                "speaker_segments": rawSpeakerSegments,
+                "duration_ms": durationMs,
+                "processing_time_ms": Date().timeIntervalSince(totalStart) * 1000,
+                "asr_processing_time_ms": asrResult.processingTime * 1000,
+                "diarization_processing_time_ms": diarizationProcessingMs,
+                "confidence": Double(asrResult.confidence),
+            ])
+            sink.finish()
+        } catch {
+            sink.fail(
+                message: "Diarized transcription failed: \(error)",
+                code: "diarization_failed",
                 recoverable: true
             )
         }
