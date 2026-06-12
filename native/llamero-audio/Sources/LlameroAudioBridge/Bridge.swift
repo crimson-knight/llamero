@@ -531,6 +531,17 @@ private func wordSegments(from spans: [WordSpan]) -> [[String: Any]] {
     }
 }
 
+private func audioDurationMs(for url: URL) -> Double {
+    guard let file = try? AVAudioFile(forReading: url) else {
+        return 0.0
+    }
+    let sampleRate = file.processingFormat.sampleRate
+    guard sampleRate > 0 else {
+        return 0.0
+    }
+    return Double(file.length) * 1000.0 / sampleRate
+}
+
 private func diarizerConfig(from config: DiarizedTranscribeConfig) -> OfflineDiarizerConfig {
     var diarizerConfig = OfflineDiarizerConfig.default
     if let threshold = config.clusteringThreshold {
@@ -690,12 +701,18 @@ public func llamero_audio_transcribe_file(
                 URL(fileURLWithPath: request.path), decoderState: &decoderState)
 
             var segments = wordSegments(from: result.tokenTimings ?? [])
+            let fileDurationMs = audioDurationMs(for: URL(fileURLWithPath: request.path))
+            let durationMs = max(
+                fileDurationMs,
+                result.duration * 1000,
+                segments.compactMap { $0["end_ms"] as? Double }.max() ?? 0.0
+            )
             if segments.isEmpty && !result.text.isEmpty {
                 // No token timings: a single segment spanning the audio.
                 segments = [[
                     "text": result.text,
                     "start_ms": 0.0,
-                    "end_ms": result.duration * 1000,
+                    "end_ms": durationMs,
                 ]]
             }
 
@@ -703,7 +720,7 @@ public func llamero_audio_transcribe_file(
                 "event": "transcript_final",
                 "text": result.text,
                 "segments": segments,
-                "duration_ms": result.duration * 1000,
+                "duration_ms": durationMs,
                 "processing_time_ms": result.processingTime * 1000,
                 "confidence": Double(result.confidence),
             ])
@@ -790,7 +807,13 @@ public func llamero_audio_runtime_transcribe_diarized(
             let diarizationProcessingMs = Date().timeIntervalSince(diarizationStart) * 1000
             let speakerDurationMs =
                 diarization.segments.map { Double($0.endTimeSeconds) * 1000 }.max() ?? 0
-            let durationMs = max(asrResult.duration * 1000, words.last?.endMs ?? 0, speakerDurationMs)
+            let fileDurationMs = audioDurationMs(for: URL(fileURLWithPath: path))
+            let durationMs = max(
+                asrResult.duration * 1000,
+                words.last?.endMs ?? 0,
+                speakerDurationMs,
+                fileDurationMs
+            )
 
             let speakerSegments = attributedSegments(
                 words: words,

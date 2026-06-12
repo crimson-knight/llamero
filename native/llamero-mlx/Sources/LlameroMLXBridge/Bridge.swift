@@ -116,6 +116,156 @@ struct BridgeError: Error, CustomStringConvertible {
     var description: String { message }
 }
 
+// Local directory loads bypass mlx-swift-lm's model registry entries, so keep
+// the chat-template stop markers that those entries normally provide.
+private let localEOSTokenCandidates: Set<String> = [
+    "<end_of_turn>",
+    "<|eot_id|>",
+    "<|im_end|>",
+    "<|end|>",
+    "<turn|>",
+]
+
+private func inferredExtraEOSTokens(modelDirectory: URL) -> Set<String> {
+    let fileNames = ["tokenizer_config.json", "tokenizer.json", "chat_template.jinja", "chat_template.json"]
+    var text = ""
+    for fileName in fileNames {
+        let url = modelDirectory.appending(component: fileName)
+        if let contents = try? String(contentsOf: url) {
+            text += contents
+        }
+    }
+    return Set(localEOSTokenCandidates.filter { text.contains($0) })
+}
+
+final class SpecialTokenAwareTrainingTokenizer: MLXLMCommon.Tokenizer, @unchecked Sendable {
+    private let upstream: any MLXLMCommon.Tokenizer
+    private let specialTokenIds: [(token: String, id: Int)]
+    private let addedSpecialTokenWrapper: (prefix: [Int], suffix: [Int])?
+
+    init(_ upstream: any MLXLMCommon.Tokenizer) {
+        self.upstream = upstream
+
+        var candidates = localEOSTokenCandidates
+        if let bos = upstream.bosToken { candidates.insert(bos) }
+        if let eos = upstream.eosToken { candidates.insert(eos) }
+        if let unknown = upstream.unknownToken { candidates.insert(unknown) }
+
+        self.specialTokenIds = candidates.compactMap { token in
+            upstream.convertTokenToId(token).map { (token: token, id: $0) }
+        }.sorted { $0.token.count > $1.token.count }
+
+        let sentinel = "llamero"
+        let withoutSpecial = upstream.encode(text: sentinel, addSpecialTokens: false)
+        let withSpecial = upstream.encode(text: sentinel, addSpecialTokens: true)
+        if let range = Self.findSubsequence(withoutSpecial, in: withSpecial) {
+            self.addedSpecialTokenWrapper = (
+                prefix: Array(withSpecial[..<range.lowerBound]),
+                suffix: Array(withSpecial[range.upperBound...])
+            )
+        } else {
+            self.addedSpecialTokenWrapper = nil
+        }
+    }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        let native = upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+        let presentTokens = specialTokenIds.filter { text.contains($0.token) }
+        guard !presentTokens.isEmpty else { return native }
+
+        let nativeCounts = Dictionary(grouping: native, by: { $0 }).mapValues(\.count)
+        let nativeCovered = presentTokens.allSatisfy { token, id in
+            (nativeCounts[id] ?? 0) >= Self.countOccurrences(of: token, in: text)
+        }
+        if nativeCovered {
+            return native
+        }
+
+        let spliced = encodeBySplicingSpecialTokens(text)
+        if addSpecialTokens, let wrapper = addedSpecialTokenWrapper {
+            return wrapper.prefix + spliced + wrapper.suffix
+        }
+        return spliced
+    }
+
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokenIds: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? {
+        upstream.convertTokenToId(token)
+    }
+
+    func convertIdToToken(_ id: Int) -> String? {
+        upstream.convertIdToToken(id)
+    }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        try upstream.applyChatTemplate(
+            messages: messages,
+            tools: tools,
+            additionalContext: additionalContext
+        )
+    }
+
+    private func encodeBySplicingSpecialTokens(_ text: String) -> [Int] {
+        var ids: [Int] = []
+        var buffer = ""
+        var index = text.startIndex
+
+        func flushBuffer() {
+            if !buffer.isEmpty {
+                ids += upstream.encode(text: buffer, addSpecialTokens: false)
+                buffer = ""
+            }
+        }
+
+        while index < text.endIndex {
+            let suffix = text[index...]
+            if let match = specialTokenIds.first(where: { suffix.hasPrefix($0.token) }) {
+                flushBuffer()
+                ids.append(match.id)
+                index = text.index(index, offsetBy: match.token.count)
+            } else {
+                buffer.append(text[index])
+                index = text.index(after: index)
+            }
+        }
+        flushBuffer()
+        return ids
+    }
+
+    private static func countOccurrences(of needle: String, in haystack: String) -> Int {
+        guard !needle.isEmpty else { return 0 }
+        var count = 0
+        var searchStart = haystack.startIndex
+        while let range = haystack.range(of: needle, range: searchStart..<haystack.endIndex) {
+            count += 1
+            searchStart = range.upperBound
+        }
+        return count
+    }
+
+    private static func findSubsequence(_ needle: [Int], in haystack: [Int]) -> Range<Int>? {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return nil }
+        for start in 0...(haystack.count - needle.count) {
+            let end = start + needle.count
+            if Array(haystack[start..<end]) == needle {
+                return start..<end
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - Handle registry
 
 final class RuntimeBox: @unchecked Sendable {
@@ -331,7 +481,11 @@ public func llamero_mlx_session_load_model(
             // never under a Crystal/C host with a blocked main thread.
             let configuration: ModelConfiguration
             if let path = request.modelPath ?? session.runtime.config.modelPath {
-                configuration = ModelConfiguration(directory: URL(fileURLWithPath: path))
+                let modelDirectory = URL(fileURLWithPath: path)
+                configuration = ModelConfiguration(
+                    directory: modelDirectory,
+                    extraEOSTokens: inferredExtraEOSTokens(modelDirectory: modelDirectory)
+                )
             } else {
                 configuration = ModelConfiguration(id: session.runtime.config.modelId)
             }
@@ -516,12 +670,13 @@ public func llamero_mlx_session_train_adapter(
                 var lastValidation: Double? = nil
 
                 do {
+                    let trainingTokenizer = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
                     try LoRATrain.train(
                         model: context.model,
                         train: train,
                         validate: valid,
                         optimizer: Adam(learningRate: request.learningRate),
-                        tokenizer: context.tokenizer,
+                        tokenizer: trainingTokenizer,
                         parameters: parameters
                     ) { progress in
                         switch progress {
@@ -555,7 +710,7 @@ public func llamero_mlx_session_train_adapter(
                         let finalValidation = try LoRATrain.evaluate(
                             model: context.model,
                             dataset: valid,
-                            tokenizer: context.tokenizer,
+                            tokenizer: trainingTokenizer,
                             batchSize: request.batchSize,
                             batchCount: 0
                         )
