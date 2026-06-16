@@ -69,7 +69,7 @@ else
   )
   cfg = Llamero::Native::AdapterTrainingConfig.new
   cfg.iterations = (ENV["FSDD_ITERS"]?.try(&.to_i?) || 400)
-  cfg.batch_size = 2
+  cfg.batch_size = (ENV["FSDD_BATCH"]?.try(&.to_i?) || 2)
   cfg.learning_rate = 1e-4
   session.train_adapter(ADAPTER_NAME, dataset, cfg) do |p|
     puts "  iter #{p.iteration}/#{p.total_iterations}: loss=#{p.loss.round(3)}" if p.iteration % 50 == 0
