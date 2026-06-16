@@ -211,7 +211,7 @@ module Llamero::Native
     # ```
     def train_adapter(
       name : String,
-      dataset : TrainingDataset | Path | String,
+      dataset : TrainingDataset | PreferenceDataset | WeightedDataset | Path | String,
       config : AdapterTrainingConfig = AdapterTrainingConfig.new,
       output_dir : Path | String | Nil = nil,
       &progress : TrainingProgressEvent -> Nil
@@ -222,9 +222,16 @@ module Llamero::Native
 
       adapter_dir = Path[output_dir || Llamero::Storage.adapters_dir.join(name)].expand
 
+      # PreferenceDataset/WeightedDataset select the DPO/weighted bridge paths.
       data_dir = case dataset
                  in TrainingDataset
                    apply_model_template(dataset)
+                   dataset.write(adapter_dir.join("dataset"))
+                 in PreferenceDataset
+                   config.training_method = :dpo
+                   dataset.write(adapter_dir.join("dataset"))
+                 in WeightedDataset
+                   config.training_method = :weighted
                    dataset.write(adapter_dir.join("dataset"))
                  in Path, String
                    dir = Path[dataset].expand
@@ -258,7 +265,7 @@ module Llamero::Native
 
     def train_adapter(
       name : String,
-      dataset : TrainingDataset | Path | String,
+      dataset : TrainingDataset | PreferenceDataset | WeightedDataset | Path | String,
       config : AdapterTrainingConfig = AdapterTrainingConfig.new,
       output_dir : Path | String | Nil = nil,
     ) : AdapterDescriptor
@@ -500,6 +507,8 @@ module Llamero::Native
           json.field "steps_per_report", config.steps_per_report
           json.field "steps_per_eval", config.steps_per_eval
           json.field "validation_batches", config.validation_batches
+          json.field "method", config.training_method.to_s
+          json.field "dpo_beta", config.dpo_beta
         end
       end
     end

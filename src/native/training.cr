@@ -51,6 +51,14 @@ module Llamero::Native
     # Validation batches per eval pass (0 = the full validation set).
     property validation_batches : Int32 = 5
 
+    # Training objective: :sft (default), :dpo (preference optimization), or
+    # :weighted (advantage-weighted / GRPO policy update). Usually inferred from
+    # the dataset type by `train_adapter`.
+    property training_method : Symbol = :sft
+
+    # DPO temperature / KL strength. Only used when training_method is :dpo.
+    property dpo_beta : Float64 = 0.1
+
     def initialize
     end
 
@@ -488,6 +496,76 @@ module Llamero::Native
           file.puts({"text" => text}.to_json)
         end
       end
+    end
+  end
+
+  # Preference dataset for DPO: (prompt, chosen, rejected) triples. The model is
+  # optimized to prefer `chosen` over `rejected` relative to the frozen base.
+  # Written as train.jsonl with {"prompt","chosen","rejected"} for the bridge's
+  # DPO path. Pairs naturally with the RL practice loop: the model's passing
+  # attempts are `chosen`, its failing ones `rejected`.
+  class PreferenceDataset
+    record Triple, prompt : String, chosen : String, rejected : String
+    getter triples = [] of Triple
+
+    def add(prompt : String, chosen : String, rejected : String) : self
+      raise ArgumentError.new("prompt cannot be blank") if prompt.blank?
+      raise ArgumentError.new("chosen/rejected cannot be blank") if chosen.blank? || rejected.blank?
+      @triples << Triple.new(prompt, chosen, rejected)
+      self
+    end
+
+    def size : Int32
+      @triples.size
+    end
+
+    def self.from_jsonl(path : Path | String) : PreferenceDataset
+      ds = new
+      File.each_line(Path[path].expand.to_s) do |line|
+        next if line.blank?
+        row = JSON.parse(line)
+        ds.add(row["prompt"].as_s, row["chosen"].as_s, row["rejected"].as_s)
+      end
+      ds
+    end
+
+    def write(directory : Path | String) : Path
+      raise ArgumentError.new("Cannot write an empty preference dataset") if @triples.empty?
+      dir = Path[directory].expand
+      FileUtils.mkdir_p(dir.to_s)
+      File.open(dir.join("train.jsonl").to_s, "w") do |f|
+        @triples.each { |t| f.puts({prompt: t.prompt, chosen: t.chosen, rejected: t.rejected}.to_json) }
+      end
+      dir
+    end
+  end
+
+  # Weighted dataset for advantage-weighted / GRPO policy updates: each
+  # (prompt, completion) carries a `weight` (a group-relative advantage). The
+  # update reinforces positive-weight completions and suppresses negative-weight
+  # ones. Written as train.jsonl with {"prompt","completion","weight"}.
+  class WeightedDataset
+    record Sample, prompt : String, completion : String, weight : Float64
+    getter samples = [] of Sample
+
+    def add(prompt : String, completion : String, weight : Float64) : self
+      raise ArgumentError.new("prompt/completion cannot be blank") if prompt.blank? || completion.blank?
+      @samples << Sample.new(prompt, completion, weight)
+      self
+    end
+
+    def size : Int32
+      @samples.size
+    end
+
+    def write(directory : Path | String) : Path
+      raise ArgumentError.new("Cannot write an empty weighted dataset") if @samples.empty?
+      dir = Path[directory].expand
+      FileUtils.mkdir_p(dir.to_s)
+      File.open(dir.join("train.jsonl").to_s, "w") do |f|
+        @samples.each { |s| f.puts({prompt: s.prompt, completion: s.completion, weight: s.weight}.to_json) }
+      end
+      dir
     end
   end
 end

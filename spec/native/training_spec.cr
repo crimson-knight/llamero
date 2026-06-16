@@ -155,6 +155,38 @@ describe Llamero::Native::TrainingDataset do
     expect_raises(ArgumentError) { Llamero::Native::TrainingDataset.from_text(["", "  "]) }
   end
 
+  it "writes a PreferenceDataset as {prompt,chosen,rejected} JSONL for DPO" do
+    dir = tmp_dir
+    begin
+      ds = Llamero::Native::PreferenceDataset.new
+      ds.add("write a record", "record P, x : Int32", "record P x:Int32")
+      ds.size.should eq(1)
+      data_dir = ds.write(dir)
+      row = JSON.parse(File.read_lines(File.join(data_dir.to_s, "train.jsonl")).first)
+      row["prompt"].as_s.should eq("write a record")
+      row["chosen"].as_s.should eq("record P, x : Int32")
+      row["rejected"].as_s.should eq("record P x:Int32")
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "writes a WeightedDataset as {prompt,completion,weight} JSONL for GRPO" do
+    dir = tmp_dir
+    begin
+      ds = Llamero::Native::WeightedDataset.new
+      ds.add("p", "good", 1.5)
+      ds.add("p", "bad", -0.8)
+      ds.size.should eq(2)
+      data_dir = ds.write(dir)
+      rows = File.read_lines(File.join(data_dir.to_s, "train.jsonl")).map { |l| JSON.parse(l) }
+      rows.map { |r| r["weight"].as_f }.should eq([1.5, -0.8])
+      rows.first["completion"].as_s.should eq("good")
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
   it "renders the Gemma template with the system prompt folded into the user turn" do
     pair = Llamero::Native::TrainingDataset::Pair.new("What is X?", "X is a thing.")
     text = Llamero::Native::TrainingDataset::GEMMA.call(pair, "You are terse.")

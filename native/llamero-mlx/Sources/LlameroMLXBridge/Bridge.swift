@@ -136,12 +136,17 @@ struct TrainRequest: Codable {
     var stepsPerReport: Int
     var stepsPerEval: Int
     var validationBatches: Int
+    // Training method: nil/"sft" (default), "dpo" (preference), or
+    // "weighted"/"grpo" (advantage-weighted policy update). Optional for
+    // backward compat with callers that predate RL.
+    var method: String?
+    var dpoBeta: Float?
 
     enum CodingKeys: String, CodingKey {
         case name
         case dataDir = "data_dir"
         case outputDir = "output_dir"
-        case rank, scale, iterations
+        case rank, scale, iterations, method
         case numLayers = "num_layers"
         case fineTuneType = "fine_tune_type"
         case batchSize = "batch_size"
@@ -149,6 +154,7 @@ struct TrainRequest: Codable {
         case stepsPerReport = "steps_per_report"
         case stepsPerEval = "steps_per_eval"
         case validationBatches = "validation_batches"
+        case dpoBeta = "dpo_beta"
     }
 }
 
@@ -719,10 +725,17 @@ public func llamero_mlx_session_train_adapter(
 
         do {
             let dataURL = URL(fileURLWithPath: request.dataDir)
-            let train = try loadLoRAData(directory: dataURL, name: "train")
-            let valid = (try? loadLoRAData(directory: dataURL, name: "valid")) ?? []
-            if train.isEmpty {
-                throw BridgeError(message: "Training dataset at \(request.dataDir) is empty")
+            let method = request.method ?? "sft"
+            // SFT reads {"text": …}; DPO/weighted read their own row formats
+            // inside RLTrain, so only load the SFT corpus here.
+            var train: [String] = []
+            var valid: [String] = []
+            if method == "sft" {
+                train = try loadLoRAData(directory: dataURL, name: "train")
+                valid = (try? loadLoRAData(directory: dataURL, name: "valid")) ?? []
+                if train.isEmpty {
+                    throw BridgeError(message: "Training dataset at \(request.dataDir) is empty")
+                }
             }
 
             let configuration = LoRAConfiguration(
@@ -746,66 +759,85 @@ public func llamero_mlx_session_train_adapter(
             let start = Date()
 
             let result: (finalLoss: Double, validationLoss: Double?) = try await container.perform { context in
-                // Applies (Q)LoRA layers in place and freezes the base
-                // weights. On quantized models the replacement layers are
-                // QLoRALinear - QLoRA happens automatically.
-                let adapter = try LoRAContainer.from(model: context.model, configuration: configuration)
-
+                let trainingTokenizer = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
                 var lastLoss: Double = 0
                 var lastValidation: Double? = nil
 
-                do {
-                    let trainingTokenizer = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
-                    try LoRATrain.train(
-                        model: context.model,
-                        train: train,
-                        validate: valid,
-                        optimizer: Adam(learningRate: request.learningRate),
-                        tokenizer: trainingTokenizer,
-                        parameters: parameters
-                    ) { progress in
-                        switch progress {
-                        case .train(let iteration, let loss, let iterationsPerSecond, let tokensPerSecond):
-                            lastLoss = Double(loss)
-                            sink.emit([
-                                "event": "training_progress",
-                                "adapter_name": request.name,
-                                "iteration": iteration,
-                                "total_iterations": request.iterations,
-                                "loss": Double(loss),
-                                "iterations_per_second": iterationsPerSecond,
-                                "tokens_per_second": tokensPerSecond,
-                            ])
-                        case .validation(let iteration, let validationLoss, _):
-                            lastValidation = Double(validationLoss)
-                            sink.emit([
-                                "event": "training_validation",
-                                "adapter_name": request.name,
-                                "iteration": iteration,
-                                "validation_loss": Double(validationLoss),
-                            ])
-                        case .save:
-                            break
-                        }
-                        return .more
-                    }
+                // DPO references are the FROZEN base — measure before LoRA install.
+                var dpoPrefs: [RLTrain.Pref] = []
+                if method == "dpo" {
+                    dpoPrefs = try RLTrain.loadPrefs(dataDir: dataURL, tokenizer: trainingTokenizer)
+                    RLTrain.cacheReferences(model: context.model, prefs: &dpoPrefs)
+                }
 
-                    // Final score against the validation set.
-                    if !valid.isEmpty {
-                        let finalValidation = try LoRATrain.evaluate(
-                            model: context.model,
-                            dataset: valid,
-                            tokenizer: trainingTokenizer,
-                            batchSize: request.batchSize,
-                            batchCount: 0
-                        )
-                        lastValidation = Double(finalValidation)
-                        sink.emit([
-                            "event": "training_validation",
-                            "adapter_name": request.name,
-                            "iteration": request.iterations,
-                            "validation_loss": Double(finalValidation),
-                        ])
+                // Applies (Q)LoRA layers in place and freezes the base weights.
+                // On quantized models the replacement layers are QLoRALinear.
+                let adapter = try LoRAContainer.from(model: context.model, configuration: configuration)
+
+                do {
+                    switch method {
+                    case "dpo":
+                        lastLoss = RLTrain.runDPO(
+                            model: context.model, prefs: dpoPrefs,
+                            iterations: request.iterations, learningRate: request.learningRate,
+                            beta: request.dpoBeta ?? 0.1, stepsPerReport: request.stepsPerReport
+                        ) { iteration, loss, margin in
+                            sink.emit([
+                                "event": "training_progress", "adapter_name": request.name,
+                                "iteration": iteration, "total_iterations": request.iterations,
+                                "loss": loss, "iterations_per_second": 0.0, "tokens_per_second": margin,
+                            ])
+                        }
+                    case "weighted", "grpo":
+                        lastLoss = try RLTrain.runWeighted(
+                            model: context.model, dataDir: dataURL, tokenizer: trainingTokenizer,
+                            iterations: request.iterations, learningRate: request.learningRate,
+                            stepsPerReport: request.stepsPerReport
+                        ) { iteration, loss in
+                            sink.emit([
+                                "event": "training_progress", "adapter_name": request.name,
+                                "iteration": iteration, "total_iterations": request.iterations,
+                                "loss": loss, "iterations_per_second": 0.0, "tokens_per_second": 0.0,
+                            ])
+                        }
+                    default:
+                        try LoRATrain.train(
+                            model: context.model, train: train, validate: valid,
+                            optimizer: Adam(learningRate: request.learningRate),
+                            tokenizer: trainingTokenizer, parameters: parameters
+                        ) { progress in
+                            switch progress {
+                            case .train(let iteration, let loss, let iterationsPerSecond, let tokensPerSecond):
+                                lastLoss = Double(loss)
+                                sink.emit([
+                                    "event": "training_progress", "adapter_name": request.name,
+                                    "iteration": iteration, "total_iterations": request.iterations,
+                                    "loss": Double(loss), "iterations_per_second": iterationsPerSecond,
+                                    "tokens_per_second": tokensPerSecond,
+                                ])
+                            case .validation(let iteration, let validationLoss, _):
+                                lastValidation = Double(validationLoss)
+                                sink.emit([
+                                    "event": "training_validation", "adapter_name": request.name,
+                                    "iteration": iteration, "validation_loss": Double(validationLoss),
+                                ])
+                            case .save:
+                                break
+                            }
+                            return .more
+                        }
+
+                        if !valid.isEmpty {
+                            let finalValidation = try LoRATrain.evaluate(
+                                model: context.model, dataset: valid, tokenizer: trainingTokenizer,
+                                batchSize: request.batchSize, batchCount: 0
+                            )
+                            lastValidation = Double(finalValidation)
+                            sink.emit([
+                                "event": "training_validation", "adapter_name": request.name,
+                                "iteration": request.iterations, "validation_loss": Double(finalValidation),
+                            ])
+                        }
                     }
 
                     // Persist in the mlx_lm adapter layout that
