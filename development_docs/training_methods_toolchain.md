@@ -233,14 +233,19 @@ staged pipeline). The generator and the trainer then speak the same language.
   Validated on-device (record task): preference margin -0.003→7.26, held-out
   rubric 0.25→0.375 with early stop + high `dpo_beta`. Over-optimizes at high
   iters/low beta (faithful to real DPO) — keep beta high and stop early.
-- **Phase 4 — GRPO (shipped).** `WeightedDataset` {prompt,completion,weight} +
-  `RLTrain.runWeighted` (advantage-weighted completion-logprob update). The loop
-  (orchestrated in Crystal, reusing the rubric) samples K, scores, computes
-  group-relative advantages, and updates. Validated: held-out 0.0→0.3→0.2 on
-  unseen specs. ON-POLICY + small LR is required; accumulating stale negatives
-  without a KL anchor diverges. NEXT: add a KL-to-reference term to `runWeighted`
-  for multi-round stability, and a Crystal reward-callback FFI so the bridge can
-  drive the whole GRPO loop.
+- **Phase 4 — GRPO (shipped, two ways).** `RLTrain.runWeighted` is an
+  advantage-weighted completion-logprob update with a **per-token KL-to-reference
+  anchor** (DeepSeek k3, references cached from the frozen base before LoRA) — the
+  anchor makes multi-round GRPO **rock-solid**: the accumulating config that
+  collapsed 0.5→0.1→0.0 without it now holds stable across rounds.
+  - *Crystal-orchestrated* (`WeightedDataset` + `train_adapter`): Crystal samples,
+    scores, computes advantages, calls the weighted update. Validated 0.0→0.3→0.2.
+  - *Bridge-driven* (`session.grpo_train`, `llamero_mlx_session_grpo_loop`): the
+    BRIDGE runs the whole loop — generate → **reward via a reward-callback FFI**
+    (serviced on the Crystal thread by `drainRL`) → advantage → KL update, for N
+    rounds. Validated on-device: 48 reward callbacks, per-round mean reward
+    0.167→0.458, held-out 0.0→0.167, no deadlock. This is the "bridge drives the
+    loop, Crystal only supplies the reward" architecture.
 - **Phase 5 — one-shot pipeline.** "docs in → staged specialist adapter out"
   tying extractor → generator → unsupervised → SFT → expert-iteration/DPO/GRPO.
 
