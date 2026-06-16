@@ -15,6 +15,12 @@ require "json"
 
 MODEL = ARGV[0]? || "mlx-community/gemma-3-1b-it-4bit"
 PAIRS = Path[__DIR__].parent.join("training_data", "fsdd_feature_story.jsonl")
+
+# A LoRA adapter is bound to the exact base model it was trained on — its tensor
+# shapes and layer keys only match that one checkpoint, so adapters NEVER work
+# cross-model. Derive a per-model adapter name so every model trains and loads
+# its OWN matching adapter (and sequential runs can't collide on disk).
+ADAPTER_NAME = "fsdd-fs-#{MODEL.split('/').last.gsub(/[^A-Za-z0-9_.-]/, "-")}"
 SYSTEM = "You are an FSDD feature-story analyst. Given a natural-language request, output ONE JSON object structuring it as a feature story: initiator (persona or scheduling), action (verb GET/POST/PUT/PATCH/DELETE for RESTful or perform/do for process/scheduling, with category), target data model or process, relationships (ActiveRecord-style), optional clauses, referenced_entities (persona/data_model/process_manager), complete + incomplete_aspects (entities referenced but not yet defined), in_scope (false if it is not a feature-story refinement request), and next_action. Output only JSON."
 
 # Held-out probes: (request, checker on the parsed JSON). The base model rarely
@@ -83,17 +89,17 @@ config.learning_rate = 1e-4
 config.steps_per_report = 50
 config.steps_per_eval = 100
 
-puts "training 'fsdd-feature-story' (#{config.iterations} iters)..."
-descriptor = session.train_adapter("fsdd-feature-story", dataset, config) do |p|
+puts "training '#{ADAPTER_NAME}' on #{MODEL} (#{config.iterations} iters)..."
+descriptor = session.train_adapter(ADAPTER_NAME, dataset, config) do |p|
   puts "  iter #{p.iteration}/#{p.total_iterations}: loss=#{p.loss.round(3)} (#{p.tokens_per_second.round(0)} tok/s)"
 end
 summary = session.last_training.not_nil!
 puts "trained in #{(summary.total_time_ms / 1000).round(1)}s, final loss=#{summary.final_loss.round(3)} -> #{descriptor.path}"
 
 session.activate_adapters(
-  Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new("fsdd-feature-story")])
+  Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new(ADAPTER_NAME)])
 )
-puts "\n--- with fsdd-feature-story adapter ---"
+puts "\n--- with #{ADAPTER_NAME} adapter ---"
 with_adapter = score.call("adapter active")
 
 session.deactivate_adapters
