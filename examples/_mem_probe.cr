@@ -28,7 +28,9 @@ cfg.iterations = ITERS
 cfg.batch_size = BATCH
 cfg.learning_rate = 1e-4
 cfg.steps_per_report = 1
-puts "training probe: batch=#{BATCH} iters=#{ITERS}"
+cfg.num_layers = (ENV["LAYERS"]?.try(&.to_i?) || cfg.num_layers)
+cfg.rank = (ENV["RANK"]?.try(&.to_i?) || cfg.rank)
+puts "training probe: batch=#{BATCH} iters=#{ITERS} num_layers=#{cfg.num_layers} rank=#{cfg.rank}"
 session.train_adapter(NAME, dataset, cfg) do |p|
   puts "iter #{p.iteration}/#{p.total_iterations} loss=#{p.loss.round(3)} #{p.tokens_per_second.round(0)}tok/s"
 end
