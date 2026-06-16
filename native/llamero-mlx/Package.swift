@@ -12,7 +12,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.4")),
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "3.31.3")),
+        // main (57 commits past the 3.31.3 tag): adds the Gemma 4 / Gemma 3n
+        // quantized-attention + KV-sharing fixes needed for the larger + edge
+        // models (gemma-3-4b load, gemma-4 e2b/12b, effective adapters).
+        // Revisit/pin to a tagged release once one ships past 3.31.3.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", branch: "main"),
         // The MLXHuggingFace macros expand to code using HubClient and
         // Tokenizers, which consumers must provide directly (mlx-swift-lm 3.x
         // decoupled itself from these).

@@ -20,6 +20,65 @@ import MLXNN
 import MLXOptimizers
 import Tokenizers
 
+// Macro-free model loading. Replicates exactly what the MLXHuggingFace
+// `#huggingFaceLoadModelContainer` macro expands to (DownloaderMacro +
+// TokenizerLoaderMacro + TokenizerAdaptorMacro). We inline it because that
+// macro plugin crashes at expansion time under the current Swift toolchain
+// (`failed to receive result from plugin`). The bridge only ever loads LOCAL
+// directories — Crystal owns model downloads — so the Downloader is a stub that
+// is never invoked; the loader reads the tokenizer from the local model folder.
+
+private struct LocalOnlyDownloader: MLXLMCommon.Downloader {
+    func download(
+        id: String,
+        revision: String?,
+        matching patterns: [String],
+        useLatest: Bool,
+        progressHandler: @Sendable @escaping (Foundation.Progress) -> Void
+    ) async throws -> URL {
+        throw NSError(
+            domain: "LlameroMLXBridge", code: 1,
+            userInfo: [NSLocalizedDescriptionKey:
+                "remote model download is not supported in the bridge; Crystal owns downloads (pass a local model_path)"])
+    }
+}
+
+private struct LlameroTokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+    init(_ upstream: any Tokenizers.Tokenizer) { self.upstream = upstream }
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+    func convertTokenToId(_ token: String) -> Int? { upstream.convertTokenToId(token) }
+    func convertIdToToken(_ id: Int) -> String? { upstream.convertIdToToken(id) }
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages, tools: tools, additionalContext: additionalContext)
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
+    }
+}
+
+private struct LlameroTokenizerLoader: MLXLMCommon.TokenizerLoader {
+    init() {}
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let upstream = try await Tokenizers.AutoTokenizer.from(modelFolder: directory)
+        return LlameroTokenizerBridge(upstream)
+    }
+}
+
 public typealias LlameroEventCallback = @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void
 
 // MARK: - JSON payloads from Crystal
@@ -491,7 +550,11 @@ public func llamero_mlx_session_load_model(
             }
 
             let wasLoaded = session.loaded
-            let container = try await #huggingFaceLoadModelContainer(configuration: configuration)
+            let container = try await loadModelContainer(
+                from: LocalOnlyDownloader(),
+                using: LlameroTokenizerLoader(),
+                configuration: configuration,
+                progressHandler: { _ in })
 
             session.container = container
             session.loaded = true
