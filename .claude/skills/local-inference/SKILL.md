@@ -147,6 +147,37 @@ session.deactivate_adapters # back to the plain base model
   `adapter_config.json` (the standard mlx_lm format).
 - v1 bridge limits: one adapter at a time, scale 1.0. Multiple slots or other
   scales raise `AdapterActivationError`.
+
+### Fused activation — full base throughput
+
+By default an adapter is applied as **live LoRA layers**, recomputed on every
+forward pass. That costs throughput (~45% slower tokens on small 4-bit models;
+the cost scales with the adapter's `num_layers`). Pass `fuse: true` to instead
+**bake the adapter delta into the re-quantized base weights**, so generation
+runs at full base speed with no per-token LoRA overhead:
+
+```crystal
+session.activate_adapters(
+  Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new("sql-expert")]),
+  fuse: true
+)
+session.active_adapters_fused? # => true
+```
+
+Trade-off: fusing **mutates** the resident base (and slightly re-quantizes it),
+so a fused adapter cannot be cheaply unloaded. The next `activate_adapters` or
+`deactivate_adapters` therefore **reloads the base model first** to restore a
+clean slate — `load_count` increments, and `deactivate_adapters` still correctly
+returns you to base behavior. Time-to-first-token is unchanged either way; the
+cost the flag removes is purely per generated token.
+
+- **`fuse: false`** (default): instant hot-swap, no reload — use when you switch
+  adapters frequently.
+- **`fuse: true`**: one-time fuse at activation, a reload only when you switch
+  away, full base throughput throughout — use when one adapter stays active for
+  a whole session (the typical on-device "one specialist per task" pattern).
+  Measured on gemma-3-4b: unfused 51.8 tok/s vs fused 94.0 tok/s (= base).
+
 - To **create** an adapter by training, use the `adapter-training` skill.
 
 ## Recipe: multiple specialized models (ModelPool)
