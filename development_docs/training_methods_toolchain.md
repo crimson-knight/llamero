@@ -227,13 +227,22 @@ staged pipeline). The generator and the trainer then speak the same language.
   on-device: held-out 0.3→1.0. No bridge changes — runs on the SFT engine.
 - **Phase 2.5 — `from_corpus_jsonl` (shipped).** Loads the kind-tagged corpus
   (text/pair) into a trainable dataset, closing docs→data→train.
-- **Phase 3 — DPO.** Preference dataset + pluggable `dpoLoss` in the bridge +
-  `method: :dpo`. Fully offline, adds per-pair preference gradients.
-- **Phase 4 — GRPO with Crystal reward callbacks.** Generation loop in the
-  bridge + a reward-proc FFI; rewards = the same schema/compile verifiers, but
-  with per-token credit assignment instead of best-of-N.
+- **Phase 3 — DPO (shipped).** `PreferenceDataset` {prompt,chosen,rejected} +
+  `RLTrain.runDPO` in the bridge (cache frozen-base reference logprobs, then the
+  DPO loss over chosen/rejected). `train_adapter` selects `method: :dpo`.
+  Validated on-device (record task): preference margin -0.003→7.26, held-out
+  rubric 0.25→0.375 with early stop + high `dpo_beta`. Over-optimizes at high
+  iters/low beta (faithful to real DPO) — keep beta high and stop early.
+- **Phase 4 — GRPO (shipped).** `WeightedDataset` {prompt,completion,weight} +
+  `RLTrain.runWeighted` (advantage-weighted completion-logprob update). The loop
+  (orchestrated in Crystal, reusing the rubric) samples K, scores, computes
+  group-relative advantages, and updates. Validated: held-out 0.0→0.3→0.2 on
+  unseen specs. ON-POLICY + small LR is required; accumulating stale negatives
+  without a KL anchor diverges. NEXT: add a KL-to-reference term to `runWeighted`
+  for multi-round stability, and a Crystal reward-callback FFI so the bridge can
+  drive the whole GRPO loop.
 - **Phase 5 — one-shot pipeline.** "docs in → staged specialist adapter out"
-  tying extractor → generator → unsupervised → SFT → expert-iteration RL.
+  tying extractor → generator → unsupervised → SFT → expert-iteration/DPO/GRPO.
 
 ## Honest unknowns
 
