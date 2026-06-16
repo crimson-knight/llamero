@@ -207,10 +207,13 @@ struct StackPayload: Codable {
     // instead of installing live LoRA layers. Optional for backward compat with
     // callers that predate the flag.
     var fuse: Bool?
+    // When true (with fuse), bake permanently into the base for fuse-forward
+    // staging — the next train_adapter trains on top of it.
+    var cumulative: Bool?
 
     enum CodingKeys: String, CodingKey {
         case stackId = "stack_id"
-        case mode, slots, fuse
+        case mode, slots, fuse, cumulative
     }
 }
 
@@ -744,6 +747,11 @@ public func llamero_mlx_session_activate_adapters(
             let shouldFuse = (payload.fuse ?? false)
                 || ProcessInfo.processInfo.environment["LLAMERO_FUSE_ADAPTERS"] != nil
             let didFuse = shouldFuse && !payload.slots.isEmpty
+            // Cumulative (fuse-forward): the adapter is baked PERMANENTLY into the
+            // base and recorded as no live adapter, so train_adapter can train the
+            // next stage on top of it. (Non-cumulative fuse keeps the adapter
+            // "active" so the Crystal side reloads on the next swap.)
+            let cumulativeFuse = didFuse && (payload.cumulative ?? false)
 
             try await container.perform { context in
                 for (_, adapter) in session.activeAdapters.reversed() {
@@ -758,7 +766,10 @@ public func llamero_mlx_session_activate_adapters(
                     } else {
                         try adapter.load(into: context.model)
                     }
-                    session.activeAdapters = [(slot.name, adapter)]
+                    // A cumulatively-fused adapter has no live LoRA layers (they
+                    // were baked in), so leave activeAdapters empty -> training the
+                    // next stage is allowed and runs on the fused base.
+                    session.activeAdapters = cumulativeFuse ? [] : [(slot.name, adapter)]
                 }
             }
 
@@ -769,6 +780,7 @@ public func llamero_mlx_session_activate_adapters(
                 "adapter_names": payload.slots.map(\.name),
                 "base_model_reloaded": false,
                 "fused": didFuse,
+                "cumulative": cumulativeFuse,
             ])
             sink.finish()
         } catch {

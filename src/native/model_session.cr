@@ -136,11 +136,15 @@ module Llamero::Native
     # activate/deactivate transparently reloads the base first (load_count then
     # increments). Use it for a single adapter held for a session; keep the
     # default (`fuse: false`) when you need cheap hot-swapping.
-    def activate_adapters(stack : AdapterStack, fuse : Bool = false) : Nil
+    # `cumulative: true` (with `fuse: true`) bakes the adapter PERMANENTLY into
+    # the base for fuse-forward staging: the next `train_adapter` trains on top of
+    # it (so you can stack Crystal -> Amber -> product knowledge by fusing each
+    # stage forward). The base stays mutated until you `load_model` to reset.
+    def activate_adapters(stack : AdapterStack, fuse : Bool = false, cumulative : Bool = false) : Nil
       ensure_loaded
 
-      # A previously fused adapter is baked into the resident weights and cannot
-      # be unloaded; reload the base for a clean slate before any new stack.
+      # A previously (non-cumulatively) fused adapter is baked into the resident
+      # weights and cannot be unloaded; reload the base before any new stack.
       if active_adapters_fused?
         load_model
         @active_adapters_fused = false
@@ -152,13 +156,15 @@ module Llamero::Native
       error : NativeErrorEvent? = nil
       reloaded = false
       fused = false
+      cumulative_fused = false
 
-      @bridge.activate_adapters(@handle, bridge_stack_json(stack, resolved, fuse)) do |frame|
+      @bridge.activate_adapters(@handle, bridge_stack_json(stack, resolved, fuse, cumulative)) do |frame|
         event = dispatch(frame)
         case event
         when AdapterActivatedEvent
           reloaded = event.base_model_reloaded
           fused = event.fused
+          cumulative_fused = event.cumulative
         when NativeErrorEvent
           error = event
         end
@@ -168,8 +174,11 @@ module Llamero::Native
         raise failure.to_error
       end
 
-      @active_adapter_stack = stack
-      @active_adapters_fused = fused
+      # A cumulative fuse leaves no live adapter (baked into the base): no stack
+      # is "active", and there's nothing to reload-away (the next stage trains on
+      # the fused base; load_model resets to the original).
+      @active_adapter_stack = cumulative_fused ? AdapterStack.none : stack
+      @active_adapters_fused = fused && !cumulative_fused
       @base_model_reloaded = reloaded
     end
 
@@ -584,12 +593,13 @@ module Llamero::Native
       end
     end
 
-    private def bridge_stack_json(stack : AdapterStack, resolved : Array({AdapterSlot, AdapterDescriptor}), fuse : Bool) : String
+    private def bridge_stack_json(stack : AdapterStack, resolved : Array({AdapterSlot, AdapterDescriptor}), fuse : Bool, cumulative : Bool = false) : String
       JSON.build do |json|
         json.object do
           json.field "stack_id", stack.stack_id
           json.field "mode", stack.mode.to_s.downcase
           json.field "fuse", fuse
+          json.field "cumulative", cumulative
           json.field "slots" do
             json.array do
               resolved.each do |slot, descriptor|

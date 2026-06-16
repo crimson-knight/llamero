@@ -86,12 +86,16 @@ module Llamero::Native
     # Whether the adapter was fused into the base weights (mutating them) rather
     # than installed as live LoRA layers.
     getter fused : Bool
+    # Whether the fuse was cumulative (fuse-forward): baked permanently into the
+    # base so the next training stage trains on top of it.
+    getter cumulative : Bool
 
     def initialize(raw : JSON::Any)
       super(raw)
       @adapter_names = raw["adapter_names"]?.try(&.as_a.map(&.as_s)) || [] of String
       @base_model_reloaded = raw["base_model_reloaded"]?.try(&.as_bool) || false
       @fused = raw["fused"]?.try(&.as_bool) || false
+      @cumulative = raw["cumulative"]?.try(&.as_bool) || false
     end
   end
 
