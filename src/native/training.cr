@@ -324,6 +324,72 @@ module Llamero::Native
       self
     end
 
+    # Loads a kind-tagged corpus JSONL — the consistent multi-method format
+    # emitted by DocExtractor / ExampleGenerator — into a trainable dataset,
+    # closing the loop from documentation to training. Each line is
+    # `{"kind": …, …}`:
+    #
+    # ```text
+    # {"kind":"text","text":"..."}                       # -> unsupervised chunk
+    # {"kind":"pair","prompt":"...","completion":"..."}  # -> supervised pair
+    # ```
+    #
+    # For a homogeneous corpus the dataset type is inferred; pass `only:` to
+    # select one kind from a mixed corpus. `preference`/`trajectory` kinds are
+    # recognized but not yet trainable as a dataset (DPO/RL land later).
+    def self.from_corpus_jsonl(
+      path : Path | String,
+      only : Symbol? = nil,
+      system_prompt : String? = nil,
+      format : Proc(Pair, String?, String)? = nil
+    ) : TrainingDataset
+      file = Path[path].expand
+      raise ArgumentError.new("Corpus file not found: #{file}") unless File.exists?(file)
+
+      texts = [] of String
+      pairs = [] of Pair
+      kinds = [] of String
+      File.each_line(file.to_s) do |line|
+        next if line.blank?
+        row = JSON.parse(line)
+        kind = row["kind"]?.try(&.as_s?) || "pair"
+        next if only && kind != only.to_s
+        kinds << kind unless kinds.includes?(kind)
+        case kind
+        when "text"
+          if t = row["text"]?.try(&.as_s?)
+            texts << t unless t.blank?
+          end
+        when "pair"
+          prompt = row["prompt"]?.try(&.as_s?)
+          completion = row["completion"]?.try(&.as_s?)
+          pairs << Pair.new(prompt, completion) if prompt && completion
+        when "preference", "trajectory"
+          raise ArgumentError.new("Corpus kind '#{kind}' is recognized but not yet trainable as a dataset (DPO/RL land later); pass only: :text or only: :pair to select what is")
+        else
+          raise ArgumentError.new("Unknown corpus kind '#{kind}' in #{file}")
+        end
+      end
+
+      effective = only.try(&.to_s) || (kinds.size == 1 ? kinds.first : nil)
+      if effective.nil?
+        raise ArgumentError.new("Mixed-kind corpus #{file} (#{kinds.join(", ")}); pass only: :text or only: :pair")
+      end
+
+      case effective
+      when "text"
+        raise ArgumentError.new("No text examples in #{file}") if texts.empty?
+        from_text(texts)
+      when "pair"
+        raise ArgumentError.new("No pair examples in #{file}") if pairs.empty?
+        dataset = new(system_prompt, format)
+        pairs.each { |p| dataset.add(p.prompt, p.completion) }
+        dataset
+      else
+        raise ArgumentError.new("Cannot build a dataset from corpus kind '#{effective}'")
+      end
+    end
+
     # UNSUPERVISED continued-pretraining dataset from raw text chunks. Unlike
     # `from_pairs_jsonl` (supervised prompt/completion), each chunk is trained on
     # verbatim with full-sequence causal-LM loss and NO chat template, so the

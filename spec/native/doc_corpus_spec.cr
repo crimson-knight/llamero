@@ -92,3 +92,48 @@ describe Llamero::Native::ExampleGenerator do
     Llamero::Native::ExampleGenerator.compiles?("puts(1 +)").should be_false
   end
 end
+
+describe "TrainingDataset.from_corpus_jsonl (closing the loop)" do
+  it "round-trips a DocExtractor :pair corpus into a supervised dataset" do
+    dir = File.join(Dir.tempdir, "corpus-#{Random::Secure.hex(4)}")
+    begin
+      FileUtils.mkdir_p(dir)
+      path = File.join(dir, "corpus.jsonl")
+      ex = Llamero::Native::DocExtractor.from_docs_json(DOCS_JSON)
+      ex.write_corpus_jsonl(path, kind: :pair)
+      ds = Llamero::Native::TrainingDataset.from_corpus_jsonl(path)
+      ds.raw_text?.should be_false
+      ds.size.should eq(2)
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "loads a text corpus as an unsupervised dataset" do
+    dir = File.join(Dir.tempdir, "corpus-#{Random::Secure.hex(4)}")
+    begin
+      FileUtils.mkdir_p(dir)
+      path = File.join(dir, "t.jsonl")
+      File.write(path, %({"kind":"text","text":"chunk one"}\n{"kind":"text","text":"chunk two"}\n))
+      ds = Llamero::Native::TrainingDataset.from_corpus_jsonl(path)
+      ds.raw_text?.should be_true
+      ds.size.should eq(2)
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "requires only: to disambiguate a mixed-kind corpus" do
+    dir = File.join(Dir.tempdir, "corpus-#{Random::Secure.hex(4)}")
+    begin
+      FileUtils.mkdir_p(dir)
+      path = File.join(dir, "m.jsonl")
+      File.write(path, %({"kind":"text","text":"doc chunk"}\n{"kind":"pair","prompt":"q","completion":"a"}\n))
+      expect_raises(ArgumentError, /Mixed/) { Llamero::Native::TrainingDataset.from_corpus_jsonl(path) }
+      Llamero::Native::TrainingDataset.from_corpus_jsonl(path, only: :pair).size.should eq(1)
+      Llamero::Native::TrainingDataset.from_corpus_jsonl(path, only: :text).raw_text?.should be_true
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+end
