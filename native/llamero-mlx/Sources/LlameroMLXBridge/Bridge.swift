@@ -163,10 +163,14 @@ struct StackPayload: Codable {
     var stackId: String
     var mode: String
     var slots: [StackSlot]
+    // When true, fuse the adapter delta into the (re-quantized) base weights
+    // instead of installing live LoRA layers. Optional for backward compat with
+    // callers that predate the flag.
+    var fuse: Bool?
 
     enum CodingKeys: String, CodingKey {
         case stackId = "stack_id"
-        case mode, slots
+        case mode, slots, fuse
     }
 }
 
@@ -622,6 +626,19 @@ public func llamero_mlx_session_activate_adapters(
                 throw BridgeError(message: "Per-slot scale overrides are not yet supported by the MLX bridge (adapter \(slot.name) has scale \(slot.scale)); the adapter's own trained scale from adapter_config.json is used")
             }
 
+            // Fuse the adapter into the (re-quantized) base weights instead of
+            // installing live LoRA layers when requested. QLoRALinear.fused()
+            // dequantizes -> adds scale*(B@A) -> RE-QUANTIZES, so the model stays
+            // 4-bit and generation runs with zero extra LoRA ops at full base
+            // throughput. Trade-off: the resident base is mutated (and slightly
+            // re-quantized), so deactivation/hot-swap then needs a base reload
+            // rather than a cheap unload — the Crystal side handles that by
+            // reloading on the next activation. Driven by the per-call `fuse`
+            // flag; LLAMERO_FUSE_ADAPTERS stays as a global override.
+            let shouldFuse = (payload.fuse ?? false)
+                || ProcessInfo.processInfo.environment["LLAMERO_FUSE_ADAPTERS"] != nil
+            let didFuse = shouldFuse && !payload.slots.isEmpty
+
             try await container.perform { context in
                 for (_, adapter) in session.activeAdapters.reversed() {
                     adapter.unload(from: context.model)
@@ -630,15 +647,7 @@ public func llamero_mlx_session_activate_adapters(
 
                 if let slot = payload.slots.first {
                     let adapter = try LoRAContainer.from(directory: URL(fileURLWithPath: slot.path))
-                    // PROTOTYPE (LLAMERO_FUSE_ADAPTERS=1): fuse the LoRA delta into the
-                    // base weights instead of installing live LoRA layers. QLoRALinear
-                    // .fused() dequantizes -> adds scale*(B@A) -> RE-QUANTIZES, so the
-                    // model stays 4-bit and generation runs with zero extra LoRA ops at
-                    // full base throughput. Trade-off: the resident base is mutated (and
-                    // slightly re-quantized), so deactivation/hot-swap then requires a
-                    // base reload rather than a cheap unload — acceptable for the
-                    // one-adapter-per-session edge case.
-                    if ProcessInfo.processInfo.environment["LLAMERO_FUSE_ADAPTERS"] != nil {
+                    if shouldFuse {
                         try adapter.fuse(with: context.model)
                     } else {
                         try adapter.load(into: context.model)
@@ -653,6 +662,7 @@ public func llamero_mlx_session_activate_adapters(
                 "event": "adapter_activated",
                 "adapter_names": payload.slots.map(\.name),
                 "base_model_reloaded": false,
+                "fused": didFuse,
             ])
             sink.finish()
         } catch {

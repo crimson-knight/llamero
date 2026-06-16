@@ -83,11 +83,15 @@ module Llamero::Native
     # Whether activating this stack forced a base model reload. The target
     # behavior is false; bridges must not hide reloads.
     getter base_model_reloaded : Bool
+    # Whether the adapter was fused into the base weights (mutating them) rather
+    # than installed as live LoRA layers.
+    getter fused : Bool
 
     def initialize(raw : JSON::Any)
       super(raw)
       @adapter_names = raw["adapter_names"]?.try(&.as_a.map(&.as_s)) || [] of String
       @base_model_reloaded = raw["base_model_reloaded"]?.try(&.as_bool) || false
+      @fused = raw["fused"]?.try(&.as_bool) || false
     end
   end
 

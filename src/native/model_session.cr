@@ -51,6 +51,12 @@ module Llamero::Native
     # The target behavior is false; bridges report it honestly when not.
     getter? base_model_reloaded : Bool = false
 
+    # Whether the active adapter was FUSED into the base weights (mutating and
+    # re-quantizing them) rather than installed as live LoRA layers. A fused
+    # delta cannot be cheaply unloaded, so the next activate/deactivate reloads
+    # the base for a clean slate. See `activate_adapters(stack, fuse: true)`.
+    getter? active_adapters_fused : Bool = false
+
     # Session id assigned by the bridge (populated from the first event).
     getter session_id : String = ""
 
@@ -122,18 +128,39 @@ module Llamero::Native
     # through the adapter registry before the bridge is touched, so unknown
     # adapters fail fast without disturbing the session. Adapter errors from
     # the bridge are raised but never kill the resident model session.
-    def activate_adapters(stack : AdapterStack) : Nil
+    #
+    # With `fuse: true` the adapter delta is baked into the (re-quantized) base
+    # weights instead of installed as live LoRA layers: generation then runs at
+    # full base throughput (no per-token LoRA ops) at the cost of mutating the
+    # resident base. Because a fused delta cannot be unloaded, the next
+    # activate/deactivate transparently reloads the base first (load_count then
+    # increments). Use it for a single adapter held for a session; keep the
+    # default (`fuse: false`) when you need cheap hot-swapping.
+    def activate_adapters(stack : AdapterStack, fuse : Bool = false) : Nil
       ensure_loaded
+
+      # A previously fused adapter is baked into the resident weights and cannot
+      # be unloaded; reload the base for a clean slate before any new stack.
+      if active_adapters_fused?
+        load_model
+        @active_adapters_fused = false
+        @active_adapter_stack = AdapterStack.none
+      end
+
       resolved = @registry.resolve(stack)
 
       error : NativeErrorEvent? = nil
       reloaded = false
+      fused = false
 
-      @bridge.activate_adapters(@handle, bridge_stack_json(stack, resolved)) do |frame|
+      @bridge.activate_adapters(@handle, bridge_stack_json(stack, resolved, fuse)) do |frame|
         event = dispatch(frame)
         case event
-        when AdapterActivatedEvent then reloaded = event.base_model_reloaded
-        when NativeErrorEvent      then error = event
+        when AdapterActivatedEvent
+          reloaded = event.base_model_reloaded
+          fused = event.fused
+        when NativeErrorEvent
+          error = event
         end
       end
 
@@ -142,6 +169,7 @@ module Llamero::Native
       end
 
       @active_adapter_stack = stack
+      @active_adapters_fused = fused
       @base_model_reloaded = reloaded
     end
 
@@ -476,11 +504,12 @@ module Llamero::Native
       end
     end
 
-    private def bridge_stack_json(stack : AdapterStack, resolved : Array({AdapterSlot, AdapterDescriptor})) : String
+    private def bridge_stack_json(stack : AdapterStack, resolved : Array({AdapterSlot, AdapterDescriptor}), fuse : Bool) : String
       JSON.build do |json|
         json.object do
           json.field "stack_id", stack.stack_id
           json.field "mode", stack.mode.to_s.downcase
+          json.field "fuse", fuse
           json.field "slots" do
             json.array do
               resolved.each do |slot, descriptor|
