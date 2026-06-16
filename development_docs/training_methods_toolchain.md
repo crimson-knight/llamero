@@ -100,6 +100,34 @@ DPO needs no reward model and no rollouts: it optimizes the policy to prefer a
 
 This is the recommended first "beyond-SFT" method because it is fully offline.
 
+## Shipped: a working RL cycle (expert iteration / rejection sampling)
+
+The first RL method is **shipped and validated**, and it needs no policy-gradient
+code — it runs on the existing SFT engine. It is genuine reward-driven policy
+improvement (RAFT / ReST / expert iteration): the model practices, is judged,
+learns from its best attempts, and generalizes.
+
+- **`Reward` / `Rubric`** (`src/native/rl.cr`): composable graded checks. The
+  built-in **static-analysis rewards** are the objective, verifiable signal the
+  owner asked for — `CrystalCompileReward` ("no errors", `crystal build
+  --no-codegen`) and `CrystalFormatReward` ("no changes made", `crystal tool
+  format --check`). `FunctionReward` covers anything else (schema parse, etc.).
+- **`PracticeLoop`**: per round — (1) sample K completions for each *training*
+  prompt, (2) score each with the rubric, (3) keep the best per prompt that
+  clears a threshold, (4) SFT the adapter on the accumulated best, (5) measure
+  the greedy rubric score on a **held-out** prompt set the model never trains on.
+  An optional `seed` (e.g. a few `ExampleGenerator` outputs) warms the buffer so
+  there is a format to refine.
+- **Validated on-device** (`examples/rl_practice_cycle.cr`, gemma-3-1b, task =
+  write a Crystal `record` for an unseen spec): held-out score **0.3 → 1.0** in
+  one round, both objectives perfect (`compiles` 0.4→1.0, `format-clean`
+  0.2→1.0), and `kept` rising 3→7 as the loop graduates from seeds to the
+  model's own passing attempts. The improvement is on **specs never trained on**
+  — real generalization, not memorization.
+
+This is the practical RL layer. GRPO below is the heavier upgrade for when
+per-token credit assignment (not just best-of-N) is needed.
+
 ## Online RL (GRPO) — the larger lift, and where it shines
 
 GRPO (group-relative policy optimization) is the simplest effective online RL:
@@ -194,12 +222,18 @@ staged pipeline). The generator and the trainer then speak the same language.
     The LLM-assisted variant (a model proposes pairs, `BaseGrammar` + compile
     verify gate them) remains a *future* option for prose-heavy docs where
     authored examples are sparse — but the deterministic path is the default.
-- **Phase 2 — DPO.** Preference dataset + pluggable `dpoLoss` in the bridge +
-  `method: :dpo`. Fully offline, unlocks the "preference layer".
-- **Phase 3 — GRPO with Crystal reward callbacks.** Generation loop in the
-  bridge + a reward-proc FFI; rewards = schema/compile verifiers.
-- **Phase 4 — unified `kind` format + one-shot pipeline.** `from_corpus_jsonl`
-  and a "docs in → staged specialist adapter out" command tying it together.
+- **Phase 2 — RL via expert iteration (shipped).** `Reward`/`Rubric`/
+  `PracticeLoop` with static-analysis rewards (compile + format-clean). Validated
+  on-device: held-out 0.3→1.0. No bridge changes — runs on the SFT engine.
+- **Phase 2.5 — `from_corpus_jsonl` (shipped).** Loads the kind-tagged corpus
+  (text/pair) into a trainable dataset, closing docs→data→train.
+- **Phase 3 — DPO.** Preference dataset + pluggable `dpoLoss` in the bridge +
+  `method: :dpo`. Fully offline, adds per-pair preference gradients.
+- **Phase 4 — GRPO with Crystal reward callbacks.** Generation loop in the
+  bridge + a reward-proc FFI; rewards = the same schema/compile verifiers, but
+  with per-token credit assignment instead of best-of-N.
+- **Phase 5 — one-shot pipeline.** "docs in → staged specialist adapter out"
+  tying extractor → generator → unsupervised → SFT → expert-iteration RL.
 
 ## Honest unknowns
 
