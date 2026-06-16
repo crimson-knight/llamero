@@ -251,13 +251,26 @@ module Llamero::Native
 
     @format : Proc(Pair, String?, String)
 
+    # Raw text chunks for UNSUPERVISED continued pretraining. When present they
+    # are trained on verbatim (no chat template) and `@pairs`/`@format` are
+    # ignored. Set via `from_text` / `from_documents`.
+    @raw_texts : Array(String)?
+
     def initialize(
       @system_prompt : String? = nil,
-      format : Proc(Pair, String?, String)? = nil
+      format : Proc(Pair, String?, String)? = nil,
+      @raw_texts : Array(String)? = nil
     )
       @format = format || CHATML
-      @format_explicit = !format.nil?
-      @template_source = format ? "explicit" : "default"
+      # Raw-text datasets never want a chat template applied, so mark them
+      # explicit (ModelSession#train_adapter only auto-templates default ones).
+      @format_explicit = !format.nil? || !@raw_texts.nil?
+      @template_source = @raw_texts ? "raw-text" : (format ? "explicit" : "default")
+    end
+
+    # True for unsupervised continued-pretraining datasets (raw text, no pairs).
+    def raw_text? : Bool
+      !@raw_texts.nil?
     end
 
     # Replaces the rendering template without marking it explicit. Used by
@@ -311,8 +324,61 @@ module Llamero::Native
       self
     end
 
+    # UNSUPERVISED continued-pretraining dataset from raw text chunks. Unlike
+    # `from_pairs_jsonl` (supervised prompt/completion), each chunk is trained on
+    # verbatim with full-sequence causal-LM loss and NO chat template, so the
+    # model absorbs the documentation's facts, vocabulary, and style. This is the
+    # "learn the domain" layer; stack supervised pairs (and later preference/RL)
+    # on top — fusing each stage's adapter into the base before the next.
+    def self.from_text(chunks : Array(String)) : TrainingDataset
+      cleaned = chunks.map(&.strip).reject(&.empty?)
+      raise ArgumentError.new("from_text needs at least one non-empty chunk") if cleaned.empty?
+      new(raw_texts: cleaned)
+    end
+
+    # Reads structured-documentation files and chunks them for unsupervised
+    # continued pretraining: each file is split on blank lines into paragraph-ish
+    # chunks, and chunks under `min_chars` are merged forward so single lines
+    # don't dominate. Markdown and plain text both work.
+    def self.from_documents(paths : Array(String) | Array(Path), min_chars : Int32 = 200) : TrainingDataset
+      chunks = [] of String
+      paths.each do |p|
+        file = Path[p].expand
+        raise ArgumentError.new("Document not found: #{file}") unless File.exists?(file)
+        chunks.concat(chunk_text(File.read(file.to_s), min_chars))
+      end
+      from_text(chunks)
+    end
+
+    # Splits text on blank lines, merging paragraphs forward until each chunk is
+    # at least `min_chars` so very short lines don't become their own examples.
+    private def self.chunk_text(content : String, min_chars : Int32) : Array(String)
+      paragraphs = content.split(/\n\s*\n/).map(&.strip).reject(&.empty?)
+      chunks = [] of String
+      buffer = ""
+      paragraphs.each do |para|
+        buffer = buffer.empty? ? para : "#{buffer}\n\n#{para}"
+        if buffer.size >= min_chars
+          chunks << buffer
+          buffer = ""
+        end
+      end
+      chunks << buffer unless buffer.strip.empty?
+      chunks
+    end
+
     def size : Int32
-      @pairs.size
+      @raw_texts.try(&.size) || @pairs.size
+    end
+
+    # The plain-text training strings: raw chunks for unsupervised datasets, or
+    # chat-template-rendered pairs for supervised ones.
+    private def dataset_texts : Array(String)
+      if raw = @raw_texts
+        raw
+      else
+        @pairs.map { |pair| @format.call(pair, @system_prompt) }
+      end
     end
 
     # Writes train.jsonl and valid.jsonl into the directory and returns it.
@@ -321,15 +387,14 @@ module Llamero::Native
     # reproducible; with very small datasets the first example is reused for
     # validation so there is always something to score against.
     def write(directory : Path | String, valid_fraction : Float64 = 0.1) : Path
-      raise ArgumentError.new("Cannot write an empty training dataset") if @pairs.empty?
+      texts = dataset_texts
+      raise ArgumentError.new("Cannot write an empty training dataset") if texts.empty?
       unless valid_fraction >= 0.0 && valid_fraction < 1.0
         raise ArgumentError.new("valid_fraction must be in [0, 1)")
       end
 
       dir = Path[directory].expand
       FileUtils.mkdir_p(dir.to_s)
-
-      texts = @pairs.map { |pair| @format.call(pair, @system_prompt) }
 
       valid_every = valid_fraction > 0 ? (1.0 / valid_fraction).round.to_i : 0
       train_texts = [] of String

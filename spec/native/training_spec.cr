@@ -115,6 +115,46 @@ describe Llamero::Native::TrainingDataset do
     end
   end
 
+  it "builds an unsupervised dataset from raw text, written verbatim (no chat template)" do
+    dir = tmp_dir
+    begin
+      chunks = ["First documentation chunk about adapters.", "Second chunk about fusing and throughput."]
+      dataset = Llamero::Native::TrainingDataset.from_text(chunks)
+      dataset.raw_text?.should be_true
+      dataset.template_source.should eq("raw-text")
+      dataset.format_explicit?.should be_true
+      dataset.size.should eq(2)
+
+      data_dir = dataset.write(dir, valid_fraction: 0.0)
+      texts = File.read_lines(File.join(data_dir.to_s, "train.jsonl")).reject(&.blank?).map { |l| JSON.parse(l)["text"].as_s }
+      texts.should contain("First documentation chunk about adapters.")
+      # Raw text must not be wrapped in any chat-template markers.
+      texts.none?(&.includes?("<|im_start|>")).should be_true
+      texts.none?(&.includes?("<start_of_turn>")).should be_true
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "chunks documents on blank lines for continued pretraining" do
+    dir = tmp_dir
+    begin
+      FileUtils.mkdir_p(dir)
+      doc = File.join(dir, "doc.md")
+      File.write(doc, "Paragraph one is long enough to be its own chunk here.\n\nParagraph two follows a blank line and is also long enough.\n")
+      dataset = Llamero::Native::TrainingDataset.from_documents([doc], min_chars: 20)
+      dataset.raw_text?.should be_true
+      dataset.size.should be >= 1
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "rejects empty raw-text datasets" do
+    expect_raises(ArgumentError) { Llamero::Native::TrainingDataset.from_text([] of String) }
+    expect_raises(ArgumentError) { Llamero::Native::TrainingDataset.from_text(["", "  "]) }
+  end
+
   it "renders the Gemma template with the system prompt folded into the user turn" do
     pair = Llamero::Native::TrainingDataset::Pair.new("What is X?", "X is a thing.")
     text = Llamero::Native::TrainingDataset::GEMMA.call(pair, "You are terse.")

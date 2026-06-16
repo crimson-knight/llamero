@@ -1,0 +1,75 @@
+Llamero is a Crystal library for building AI applications with two independent
+tracks that share the same Message and BaseGrammar types. The cloud track wraps
+OpenAI, Anthropic, Groq, and OpenRouter behind a single Llamero::Client subclass
+with automatic retry and failover. The native track, Llamero::Native, runs MLX
+models locally on Apple Silicon through a Swift bridge with no Python and no
+llama.cpp.
+
+Llamero::Native::MLXRuntime owns a model id and a Swift bridge handle. Calling
+runtime.start_session returns a Llamero::Native::ModelSession. A session must
+call load_model before any chat: load_model downloads the model on first use,
+loads it resident into memory, and returns ModelLoadMetrics. The resident model
+is reused for every subsequent chat, stream, and structured call.
+
+A ModelSession answers chat with session.chat(messages), which returns a
+NativeChatResponse. The generated text is response.content, never response.text
+or response.message. response.metrics is a GenerationMetrics with
+tokens_per_second, time_to_first_token_ms, total_time_ms, input_tokens, and
+output_tokens. Streaming uses session.chat_stream(messages) with a block that
+receives each token as it is generated.
+
+Structured output uses session.chat_structured(messages, SchemaClass) where the
+schema class inherits from Llamero::BaseGrammar and gives every property a
+default value. Llamero generates the JSON Schema, instructs the model, strips
+code fences and prose, and parses the result into response.parsed. A
+non-conforming response raises StructuredParseError carrying the raw text.
+
+A LoRA or QLoRA adapter is a small removable knowledge filter applied to the
+resident base model. session.activate_adapters and session.deactivate_adapters
+toggle an adapter at runtime without reloading the base, so load_count stays at
+one. Adapters are registered by name and directory through runtime.adapters and
+applied as an AdapterStack of AdapterSlots.
+
+An adapter is bound to the exact base model it was trained on. Its tensor shapes
+and layer keys only match that one checkpoint, so adapters never transfer across
+models. Each model must train and load its own matching adapter. A trained
+adapter directory contains adapters.safetensors and adapter_config.json in the
+standard mlx_lm format.
+
+Adapters are applied unfused by default: the low-rank LoRA matrices are computed
+on every forward pass, which costs throughput because the extra operations rerun
+for each generated token. Passing fuse: true to activate_adapters bakes the
+adapter delta into the re-quantized base weights instead, so generation runs at
+full base speed with no per-token overhead. Fusing mutates the resident base, so
+deactivation reloads the base to restore a clean state.
+
+session.train_adapter(name, dataset, config) trains a new adapter on the
+resident model with QLoRA and registers the artifact under name. The
+AdapterTrainingConfig controls rank, scale, num_layers, iterations, batch_size,
+and learning_rate. num_layers dials both the adapter's inference overhead and
+its training memory: fewer adapted layers means fewer extra operations and a
+smaller footprint.
+
+A TrainingDataset is the input to train_adapter. TrainingDataset.from_pairs_jsonl
+builds a supervised dataset from prompt and completion pairs, rendered through
+the model's chat template. TrainingDataset.from_text and from_documents build an
+unsupervised continued-pretraining dataset from raw text chunks, trained verbatim
+with full-sequence loss and no chat template so the model absorbs a domain's
+facts, vocabulary, and style.
+
+Multiple learning methods compose into a pipeline of specialized adapters.
+Unsupervised continued pretraining teaches the domain, supervised fine-tuning
+teaches the task format, and preference or reinforcement learning optimizes for a
+verifiable reward. Fusing each stage's adapter into the base before training the
+next lets every stage build on the knowledge of the one before it.
+
+Storage defaults to the ~/.llamero directory and is set with Llamero.storage_root
+or the LLAMERO_HOME environment variable before any runtime is created. The
+storage root holds local model downloads under models, trained adapters under
+adapters, the Swift bridge dylib under lib, and configured audio model caches
+under audio_models.
+
+On a machine without the built Swift bridge, the native track silently uses a
+deterministic mock that returns canned text. Real on-device inference code should
+gate on runtime.real_bridge? so it does not mistake mock output for a real model.
+The bridge is built once per machine with build.sh inside native/llamero-mlx.
