@@ -66,5 +66,12 @@ module Llamero::Native
     # resident model. Request JSON carries the dataset dir, output dir, and
     # AdapterTrainingConfig fields.
     abstract def train_adapter(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
+
+    # Bridge-driven GRPO: the bridge samples completions for each prompt, calls
+    # `reward` (prompt, completion) -> score for each, computes group-relative
+    # advantages, and runs the KL-anchored weighted update for the requested
+    # rounds — yielding grpo_round / training_completed frames. The reward proc
+    # is invoked on this (the calling) thread.
+    abstract def grpo_loop(session : Int64, request_json : String, reward : (String, String) -> Float64, &on_event : JSON::Any ->) : Nil
   end
 end

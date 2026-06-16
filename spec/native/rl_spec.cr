@@ -81,3 +81,32 @@ describe N::PracticeLoop do
     end
   end
 end
+
+describe "ModelSession#grpo_train (bridge-driven loop)" do
+  it "runs the bridge GRPO loop, invoking the reward callback and registering the adapter" do
+    original = Llamero.storage_root
+    tmp = File.join(Dir.tempdir, "llamero-grpo-#{Random::Secure.hex(6)}")
+    begin
+      Llamero.storage_root = tmp
+      runtime = N::MLXRuntime.new(model_id: "test-model", bridge: N::MockBridge.new)
+      session = runtime.start_session
+      session.load_model
+
+      reward_calls = 0
+      reward = ->(_prompt : String, completion : String) : Float64 do
+        reward_calls += 1
+        completion.includes?("record") ? 1.0 : 0.0
+      end
+
+      descriptor = session.grpo_train("grpo-mock", ["write a record"], reward, rounds: 2, samples: 3)
+
+      reward_calls.should eq(6) # 1 prompt * 3 samples * 2 rounds, all via the callback
+      descriptor.name.should eq("grpo-mock")
+      session.load_count.should eq(1) # GRPO did not reload the base
+      runtime.close
+    ensure
+      Llamero.storage_root = original
+      FileUtils.rm_rf(tmp)
+    end
+  end
+end

@@ -81,6 +81,10 @@ private struct LlameroTokenizerLoader: MLXLMCommon.TokenizerLoader {
 
 public typealias LlameroEventCallback = @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void
 
+// Reward callback for bridge-driven RL: given (prompt, completion), returns a
+// scalar reward. Invoked on the FFI calling (Crystal) thread via drainRL.
+public typealias LlameroRewardCallback = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Double
+
 // MARK: - JSON payloads from Crystal
 
 struct RuntimeConfig: Codable {
@@ -156,6 +160,34 @@ struct TrainRequest: Codable {
         case stepsPerEval = "steps_per_eval"
         case validationBatches = "validation_batches"
         case dpoBeta = "dpo_beta"
+        case klBeta = "kl_beta"
+    }
+}
+
+// Bridge-driven GRPO loop request: the bridge samples completions for each
+// prompt, asks Crystal for rewards, computes group-relative advantages, and
+// runs the KL-anchored weighted update — for `rounds` rounds.
+struct GRPORequest: Codable {
+    var name: String
+    var outputDir: String
+    var rank: Int
+    var scale: Float
+    var numLayers: Int
+    var prompts: [String]
+    var rounds: Int
+    var samples: Int
+    var temperature: Float
+    var maxTokens: Int
+    var iterations: Int
+    var learningRate: Float
+    var klBeta: Float
+
+    enum CodingKeys: String, CodingKey {
+        case name, prompts, rounds, samples, temperature, iterations, rank, scale
+        case outputDir = "output_dir"
+        case numLayers = "num_layers"
+        case maxTokens = "max_tokens"
+        case learningRate = "learning_rate"
         case klBeta = "kl_beta"
     }
 }
@@ -476,6 +508,72 @@ final class EventSink: @unchecked Sendable {
             if let callback {
                 for json in batch {
                     json.withCString { callback($0, userData) }
+                }
+            }
+            if done {
+                return finalStatus
+            }
+        }
+    }
+
+    // ---- Reward request/response channel (bridge-driven RL) ----
+    // The work task posts a (prompt, completion) and blocks; drainRL (on the
+    // Crystal calling thread) invokes the reward callback and replies. This
+    // keeps Crystal callbacks on the Crystal thread, like event delivery.
+    private var rewardPending = false
+    private var rewardAnswered = false
+    private var rewardPrompt = ""
+    private var rewardCompletion = ""
+    private var rewardResult: Double = 0
+
+    func askReward(prompt: String, completion: String) -> Double {
+        condition.lock()
+        rewardPrompt = prompt
+        rewardCompletion = completion
+        rewardPending = true
+        rewardAnswered = false
+        condition.signal()
+        while !rewardAnswered {
+            condition.wait()
+        }
+        let r = rewardResult
+        condition.unlock()
+        return r
+    }
+
+    func drainRL(
+        eventCallback: LlameroEventCallback?, eventUserData: UnsafeMutableRawPointer?,
+        rewardCallback: LlameroRewardCallback?, rewardUserData: UnsafeMutableRawPointer?
+    ) -> Int32 {
+        while true {
+            condition.lock()
+            while pending.isEmpty && !finished && !rewardPending {
+                condition.wait()
+            }
+            if rewardPending {
+                let p = rewardPrompt
+                let c = rewardCompletion
+                condition.unlock()
+                let r = p.withCString { pc in c.withCString { cc in
+                    rewardCallback?(pc, cc, rewardUserData) ?? 0
+                }}
+                condition.lock()
+                rewardResult = r
+                rewardPending = false
+                rewardAnswered = true
+                condition.signal()
+                condition.unlock()
+                continue
+            }
+            let batch = pending
+            pending.removeAll()
+            let done = finished && pending.isEmpty
+            let finalStatus = status
+            condition.unlock()
+
+            if let eventCallback {
+                for json in batch {
+                    json.withCString { eventCallback($0, eventUserData) }
                 }
             }
             if done {
@@ -891,6 +989,131 @@ public func llamero_mlx_session_train_adapter(
     }
 
     return sink.drain(callback: callback, userData: userData)
+}
+
+// Bridge-driven GRPO: the bridge samples K completions per prompt, asks Crystal
+// for each reward via the reward callback (serviced on the Crystal thread by
+// drainRL), computes group-relative advantages, and runs the KL-anchored
+// weighted update — for `rounds` rounds — then saves the adapter.
+@_cdecl("llamero_mlx_session_grpo_loop")
+public func llamero_mlx_session_grpo_loop(
+    _ handle: Int64,
+    _ requestJson: UnsafePointer<CChar>?,
+    _ rewardCallback: LlameroRewardCallback?,
+    _ rewardUserData: UnsafeMutableRawPointer?,
+    _ eventCallback: LlameroEventCallback?,
+    _ eventUserData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let session = BridgeRegistry.shared.session(handle) else { return 2 }
+    guard let requestJson,
+        let data = String(cString: requestJson).data(using: .utf8),
+        let request = try? JSONDecoder().decode(GRPORequest.self, from: data)
+    else { return 3 }
+
+    let sink = EventSink(
+        sessionId: "mlx-session-\(handle)", modelId: session.modelId,
+        adapterStackId: session.adapterStackId
+    )
+
+    Task.detached {
+        guard let container = session.container, session.loaded else {
+            sink.fail(message: "Cannot run GRPO before the model is loaded", code: "grpo_failed", recoverable: true, baseModelLoaded: false)
+            return
+        }
+        guard session.activeAdapters.isEmpty else {
+            sink.fail(message: "Deactivate adapters before GRPO", code: "grpo_failed", recoverable: true, baseModelLoaded: true)
+            return
+        }
+        let configuration = LoRAConfiguration(
+            numLayers: request.numLayers, fineTuneType: .lora,
+            loraParameters: .init(rank: request.rank, scale: request.scale)
+        )
+        let start = Date()
+        do {
+            try await container.perform { context in
+                let tok = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
+                let adapter = try LoRAContainer.from(model: context.model, configuration: configuration)
+                do {
+                    for round in 0 ..< request.rounds {
+                        var samples: [RLTrain.WeightedSample] = []
+                        var rewardSum = 0.0
+                        var rewardCount = 0
+                        for prompt in request.prompts {
+                            var comps: [String] = []
+                            var rewards: [Double] = []
+                            for _ in 0 ..< request.samples {
+                                let input = try await context.processor.prepare(
+                                    input: UserInput(chat: [Chat.Message.user(prompt)]))
+                                var params = GenerateParameters()
+                                params.temperature = request.temperature
+                                params.maxTokens = request.maxTokens
+                                var text = ""
+                                let stream = try MLXLMCommon.generate(input: input, parameters: params, context: context)
+                                for await gen in stream {
+                                    if case .chunk(let t) = gen { text += t }
+                                }
+                                let reward = sink.askReward(prompt: prompt, completion: text)
+                                comps.append(text); rewards.append(reward)
+                                rewardSum += reward; rewardCount += 1
+                            }
+                            let mean = rewards.reduce(0, +) / Double(max(rewards.count, 1))
+                            let variance = rewards.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(max(rewards.count, 1))
+                            let std = variance.squareRoot()
+                            if std < 1e-6 { continue } // whole group scored equally -> no advantage
+                            for (i, text) in comps.enumerated() {
+                                let adv = (rewards[i] - mean) / (std + 1e-4)
+                                let pl = tok.encode(text: prompt).count
+                                let full = tok.encode(text: prompt + text)
+                                if full.count > pl {
+                                    samples.append(RLTrain.WeightedSample(full: full, promptLen: pl, weight: Float(adv)))
+                                }
+                            }
+                        }
+                        let meanReward = rewardCount > 0 ? rewardSum / Double(rewardCount) : 0
+                        if !samples.isEmpty {
+                            // Cache references on the FROZEN base (LoRA off), then restore policy.
+                            context.model.setLoRAEnabled(false)
+                            RLTrain.cacheWeightedReferences(model: context.model, samples: &samples)
+                            context.model.setLoRAEnabled(true)
+                            _ = RLTrain.runWeighted(
+                                model: context.model, samples: samples,
+                                iterations: request.iterations, learningRate: request.learningRate,
+                                klBeta: request.klBeta, stepsPerReport: max(request.iterations, 1)
+                            ) { _, _, _ in }
+                        }
+                        sink.emit([
+                            "event": "grpo_round", "adapter_name": request.name,
+                            "round": round, "mean_reward": meanReward, "samples": samples.count,
+                        ])
+                    }
+
+                    let outputURL = URL(fileURLWithPath: request.outputDir)
+                    try FileManager.default.createDirectory(at: outputURL, withIntermediateDirectories: true)
+                    let weights = Dictionary(uniqueKeysWithValues: context.model.trainableParameters().flattened())
+                    try MLX.save(arrays: weights, url: outputURL.appending(component: "adapters.safetensors"))
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = .prettyPrinted
+                    try encoder.encode(configuration).write(to: outputURL.appending(component: "adapter_config.json"))
+                    adapter.unload(from: context.model)
+                } catch {
+                    adapter.unload(from: context.model)
+                    throw error
+                }
+            }
+            sink.emit([
+                "event": "training_completed", "adapter_name": request.name,
+                "adapter_path": request.outputDir, "iterations": request.iterations * request.rounds,
+                "final_loss": 0.0, "total_time_ms": Date().timeIntervalSince(start) * 1000,
+            ])
+            sink.finish()
+        } catch {
+            sink.fail(message: "GRPO failed: \(error)", code: "grpo_failed", recoverable: true, baseModelLoaded: session.loaded)
+        }
+    }
+
+    return sink.drainRL(
+        eventCallback: eventCallback, eventUserData: eventUserData,
+        rewardCallback: rewardCallback, rewardUserData: rewardUserData)
 }
 
 @_cdecl("llamero_mlx_session_generate")

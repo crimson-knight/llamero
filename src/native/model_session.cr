@@ -272,6 +272,76 @@ module Llamero::Native
       train_adapter(name, dataset, config, output_dir) { }
     end
 
+    # Bridge-driven GRPO: the bridge itself samples `samples` completions per
+    # prompt, calls `reward.call(prompt, completion)` for each (on this thread),
+    # computes group-relative advantages, and runs the KL-anchored weighted
+    # update for `rounds` rounds — then saves and registers the adapter. The
+    # whole reinforcement loop runs in one call; only the reward comes from
+    # Crystal. `reward` is typically a `Rubric`'s score.
+    def grpo_train(
+      name : String,
+      prompts : Array(String),
+      reward : (String, String) -> Float64,
+      config : AdapterTrainingConfig = AdapterTrainingConfig.new,
+      rounds : Int32 = 2,
+      samples : Int32 = 6,
+      temperature : Float32 = 0.9_f32,
+      max_tokens : Int32 = 64,
+      output_dir : Path | String | Nil = nil,
+    ) : AdapterDescriptor
+      ensure_loaded
+      raise ArgumentError.new("Adapter name cannot be blank") if name.blank?
+      raise ArgumentError.new("prompts cannot be empty") if prompts.empty?
+      config.validate!
+
+      adapter_dir = Path[output_dir || Llamero::Storage.adapters_dir.join(name)].expand
+      request = grpo_request_json(name, adapter_dir, prompts, config, rounds, samples, temperature, max_tokens)
+
+      error : NativeErrorEvent? = nil
+      completed : TrainingCompletedEvent? = nil
+      @bridge.grpo_loop(@handle, request, reward) do |frame|
+        event = dispatch(frame)
+        case event
+        when TrainingCompletedEvent then completed = event
+        when NativeErrorEvent       then error = event
+        end
+      end
+
+      if failure = error
+        raise failure.to_error
+      end
+      final_completed = completed
+      summary = final_completed || raise AdapterTrainingError.new("Bridge finished GRPO without a training_completed event")
+      @last_training = summary
+      @registry.register(name, summary.adapter_path)
+    end
+
+    private def grpo_request_json(
+      name : String, output_dir : Path, prompts : Array(String),
+      config : AdapterTrainingConfig, rounds : Int32, samples : Int32,
+      temperature : Float32, max_tokens : Int32
+    ) : String
+      JSON.build do |json|
+        json.object do
+          json.field "name", name
+          json.field "output_dir", output_dir.to_s
+          json.field "rank", config.rank
+          json.field "scale", config.scale
+          json.field "num_layers", config.num_layers
+          json.field "rounds", rounds
+          json.field "samples", samples
+          json.field "temperature", temperature
+          json.field "max_tokens", max_tokens
+          json.field "iterations", config.iterations
+          json.field "learning_rate", config.learning_rate
+          json.field "kl_beta", config.kl_beta
+          json.field "prompts" do
+            json.array { prompts.each { |p| json.string(p) } }
+          end
+        end
+      end
+    end
+
     # Blocking chat completion against the resident model.
     def chat(
       messages : Array(Message),

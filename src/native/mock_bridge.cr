@@ -220,6 +220,47 @@ module Llamero::Native
       })
     end
 
+    def grpo_loop(session : Int64, request_json : String, reward : (String, String) -> Float64, &on_event : JSON::Any ->) : Nil
+      state = session_state(session)
+      request = JSON.parse(request_json)
+      name = request["name"]?.try(&.as_s) || "adapter"
+      output_dir = request["output_dir"].as_s
+      rounds = request["rounds"]?.try(&.as_i) || 1
+      samples = request["samples"]?.try(&.as_i) || 2
+      prompts = request["prompts"]?.try(&.as_a.map(&.as_s)) || [] of String
+
+      rounds.times do |r|
+        total = 0.0
+        count = 0
+        prompts.each do |prompt|
+          samples.times do |k|
+            # Mock "generation": a canned completion that exercises the reward
+            # callback round-trip (Crystal reward proc invoked from the bridge).
+            total += reward.call(prompt, "record Mock#{k}, x : Int32")
+            count += 1
+          end
+        end
+        emit(on_event, state, session, {
+          "event" => "grpo_round", "adapter_name" => name, "round" => r,
+          "mean_reward" => count > 0 ? (total / count) : 0.0, "samples" => count,
+        })
+      end
+
+      Dir.mkdir_p(output_dir)
+      File.write(File.join(output_dir, "adapters.safetensors"), "mock-grpo-weights-#{name}")
+      File.write(File.join(output_dir, "adapter_config.json"), {
+        "num_layers"      => request["num_layers"]?.try(&.as_i) || 8,
+        "fine_tune_type"  => "lora",
+        "lora_parameters" => {"rank" => request["rank"]?.try(&.as_i) || 8, "scale" => request["scale"]?.try(&.as_f) || 10.0},
+      }.to_json)
+
+      emit(on_event, state, session, {
+        "event" => "training_completed", "adapter_name" => name,
+        "adapter_path" => output_dir, "iterations" => (request["iterations"]?.try(&.as_i) || 1) * rounds,
+        "final_loss" => 0.0, "total_time_ms" => 1000.0,
+      })
+    end
+
     # Spec helpers: inspect per-session state without going through events.
 
     def load_count(session : Int64) : Int32

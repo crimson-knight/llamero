@@ -44,6 +44,17 @@ module Llamero::Native
       Box(Proc(String, Nil)).unbox(user_data).call(String.new(json))
     end
 
+    # Trampoline for the bridge-driven RL reward callback: unboxes the Crystal
+    # reward proc and returns its score. Stays non-closure; never lets a Crystal
+    # exception unwind through the Swift caller.
+    REWARD_TRAMPOLINE = ->(prompt : LibC::Char*, completion : LibC::Char*, user_data : Void*) : Float64 do
+      begin
+        Box(Proc(String, String, Float64)).unbox(user_data).call(String.new(prompt), String.new(completion))
+      rescue
+        0.0
+      end
+    end
+
     getter library_path : String
 
     @dylib : Void*
@@ -55,6 +66,7 @@ module Llamero::Native
     @session_activate_adapters : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @session_generate : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @session_train_adapter : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
+    @session_grpo_loop : Proc(Int64, LibC::Char*, Void*, Void*, Void*, Void*, Int32)
 
     # Locates the bridge dylib. Search order:
     # 1. LLAMERO_MLX_LIB environment variable
@@ -108,6 +120,7 @@ module Llamero::Native
       @session_activate_adapters = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_activate_adapters"), Pointer(Void).null)
       @session_generate = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_generate"), Pointer(Void).null)
       @session_train_adapter = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_train_adapter"), Pointer(Void).null)
+      @session_grpo_loop = Proc(Int64, LibC::Char*, Void*, Void*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_grpo_loop"), Pointer(Void).null)
     end
 
     def name : String
@@ -163,6 +176,13 @@ module Llamero::Native
     def train_adapter(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
       with_events(on_event) do |callback, user_data|
         @session_train_adapter.call(session, request_json.to_unsafe, callback, user_data)
+      end
+    end
+
+    def grpo_loop(session : Int64, request_json : String, reward : (String, String) -> Float64, &on_event : JSON::Any ->) : Nil
+      reward_box = Box.box(reward)
+      with_events(on_event) do |event_cb, event_ud|
+        @session_grpo_loop.call(session, request_json.to_unsafe, REWARD_TRAMPOLINE.pointer.as(Void*), reward_box, event_cb, event_ud)
       end
     end
 
