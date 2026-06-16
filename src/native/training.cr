@@ -59,6 +59,10 @@ module Llamero::Native
     # DPO temperature / KL strength. Only used when training_method is :dpo.
     property dpo_beta : Float64 = 0.1
 
+    # KL-to-reference penalty strength for :weighted (GRPO). Anchors the policy to
+    # the frozen base so multi-round updates don't diverge. 0 disables the anchor.
+    property kl_beta : Float64 = 0.05
+
     def initialize
     end
 

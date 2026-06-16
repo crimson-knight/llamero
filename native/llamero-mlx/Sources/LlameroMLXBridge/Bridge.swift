@@ -141,6 +141,7 @@ struct TrainRequest: Codable {
     // backward compat with callers that predate RL.
     var method: String?
     var dpoBeta: Float?
+    var klBeta: Float?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -155,6 +156,7 @@ struct TrainRequest: Codable {
         case stepsPerEval = "steps_per_eval"
         case validationBatches = "validation_batches"
         case dpoBeta = "dpo_beta"
+        case klBeta = "kl_beta"
     }
 }
 
@@ -763,11 +765,15 @@ public func llamero_mlx_session_train_adapter(
                 var lastLoss: Double = 0
                 var lastValidation: Double? = nil
 
-                // DPO references are the FROZEN base — measure before LoRA install.
+                // DPO/GRPO references are the FROZEN base — measure before LoRA install.
                 var dpoPrefs: [RLTrain.Pref] = []
+                var weightedSamples: [RLTrain.WeightedSample] = []
                 if method == "dpo" {
                     dpoPrefs = try RLTrain.loadPrefs(dataDir: dataURL, tokenizer: trainingTokenizer)
                     RLTrain.cacheReferences(model: context.model, prefs: &dpoPrefs)
+                } else if method == "weighted" || method == "grpo" {
+                    weightedSamples = try RLTrain.loadWeighted(dataDir: dataURL, tokenizer: trainingTokenizer)
+                    RLTrain.cacheWeightedReferences(model: context.model, samples: &weightedSamples)
                 }
 
                 // Applies (Q)LoRA layers in place and freezes the base weights.
@@ -789,15 +795,15 @@ public func llamero_mlx_session_train_adapter(
                             ])
                         }
                     case "weighted", "grpo":
-                        lastLoss = try RLTrain.runWeighted(
-                            model: context.model, dataDir: dataURL, tokenizer: trainingTokenizer,
+                        lastLoss = RLTrain.runWeighted(
+                            model: context.model, samples: weightedSamples,
                             iterations: request.iterations, learningRate: request.learningRate,
-                            stepsPerReport: request.stepsPerReport
-                        ) { iteration, loss in
+                            klBeta: request.klBeta ?? 0.05, stepsPerReport: request.stepsPerReport
+                        ) { iteration, loss, kl in
                             sink.emit([
                                 "event": "training_progress", "adapter_name": request.name,
                                 "iteration": iteration, "total_iterations": request.iterations,
-                                "loss": loss, "iterations_per_second": 0.0, "tokens_per_second": 0.0,
+                                "loss": loss, "iterations_per_second": 0.0, "tokens_per_second": kl,
                             ])
                         }
                     default:

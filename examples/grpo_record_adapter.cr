@@ -71,14 +71,17 @@ base = holdout_score.call
 puts "baseline held-out rubric: #{base}"
 puts "GRPO: #{rounds} rounds x #{samples} samples; #{TRAIN.size} train / #{HOLDOUT.size} HELD-OUT specs"
 
-# ON-POLICY: each round trains only on the CURRENT round's samples (plus a tiny
-# ground-truth anchor), not a growing buffer of stale negatives — without a KL
-# anchor in the loss, accumulating stale advantages lets the policy run away.
+# Buffer of advantage-weighted samples, warm-started with two ground-truth
+# records. ON-POLICY (default) resets each round; ACCUMULATE=1 keeps a growing
+# buffer of stale advantages — which diverged WITHOUT the KL anchor but is now
+# stabilized by the per-token KL-to-reference penalty in runWeighted.
 seed = TRAIN.first(2).map { |s| {instr(s), good(s), 1.0} }
+accumulate = !ENV["ACCUMULATE"]?.nil?
+buffer = seed.dup
 results = [] of {Int32, Int32, Float64}
 
 rounds.times do |r|
-  buffer = seed.dup
+  buffer = seed.dup unless accumulate
   TRAIN.each do |s|
     prompt = instr(s)
     comps = [] of String
@@ -107,6 +110,7 @@ rounds.times do |r|
   config.iterations = (ENV["ITERS"]?.try(&.to_i?) || 60)
   config.num_layers = 8
   config.learning_rate = (ENV["LR"]?.try(&.to_f?) || 5e-6)
+  config.kl_beta = (ENV["KL_BETA"]?.try(&.to_f?) || 0.05) # KL-to-reference anchor
   config.steps_per_report = 1000
   session.train_adapter("grpo-records", wds, config)
   session.activate_adapters(stack)

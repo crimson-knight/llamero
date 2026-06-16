@@ -509,6 +509,7 @@ module Llamero::Native
           json.field "validation_batches", config.validation_batches
           json.field "method", config.training_method.to_s
           json.field "dpo_beta", config.dpo_beta
+          json.field "kl_beta", config.kl_beta
         end
       end
     end

@@ -27,24 +27,35 @@ enum RLTrain {
         var refChosen: Float = 0; var refRejected: Float = 0
     }
 
-    struct WeightedSample { let full: [Int]; let promptLen: Int; let weight: Float }
+    struct WeightedSample {
+        let full: [Int]; let promptLen: Int; let weight: Float
+        var refLogprobs: MLXArray? = nil // cached per-token base logprobs [1, n-1]
+    }
 
-    // Differentiable sum of log p(token) over the COMPLETION span of a full
-    // (prompt+completion) token sequence. crossEntropy gives -logp per position;
-    // we mask out the prompt positions and negate.
-    static func completionLogprob(_ model: Module, _ fullTokens: [Int], _ promptLen: Int) -> MLXArray {
+    // Per-token log p(token) for a full sequence: [1, n-1], position i is the
+    // logprob of token i+1 given the prefix. crossEntropy is -logp per position.
+    static func perTokenLogprobs(_ model: Module, _ fullTokens: [Int]) -> MLXArray {
         let llm = model as! any LLMModel
         let n = fullTokens.count
         let input = MLXArray(fullTokens.map { Int32($0) }).reshaped([1, n])
         let logits = llm(input, cache: nil).asType(.float32) // [1, n, V]
         let shifted = logits[0..., 0 ..< (n - 1), 0...]       // predict token i from pos i-1
         let targets = MLXArray(fullTokens[1...].map { Int32($0) }).reshaped([1, n - 1])
-        let ce = crossEntropy(logits: shifted, targets: targets) // [1, n-1] = -logp
+        return -crossEntropy(logits: shifted, targets: targets) // [1, n-1] = logp
+    }
+
+    // 1.0 over completion positions, 0.0 over the prompt (in the [1, n-1] frame).
+    static func completionMask(_ n: Int, _ promptLen: Int) -> MLXArray {
         var maskVals = [Float](repeating: 0, count: n - 1)
         let lo = max(promptLen - 1, 0)
-        if lo < n - 1 { for i in lo ..< (n - 1) { maskVals[i] = 1 } } // completion positions
-        let mask = MLXArray(maskVals).reshaped([1, n - 1])
-        return -(ce * mask).sum()
+        if lo < n - 1 { for i in lo ..< (n - 1) { maskVals[i] = 1 } }
+        return MLXArray(maskVals).reshaped([1, n - 1])
+    }
+
+    // Differentiable sum of log p over the COMPLETION span.
+    static func completionLogprob(_ model: Module, _ fullTokens: [Int], _ promptLen: Int) -> MLXArray {
+        let lp = perTokenLogprobs(model, fullTokens)
+        return (lp * completionMask(fullTokens.count, promptLen)).sum()
     }
 
     private static func loadLines(_ dataDir: URL) throws -> [String] {
@@ -120,11 +131,7 @@ enum RLTrain {
 
     // ---- Weighted / GRPO ----
 
-    static func runWeighted(
-        model: Module, dataDir: URL, tokenizer: any MLXLMCommon.Tokenizer,
-        iterations: Int, learningRate: Float, stepsPerReport: Int,
-        report: (Int, Double) -> Void
-    ) throws -> Double {
+    static func loadWeighted(dataDir: URL, tokenizer: any MLXLMCommon.Tokenizer) throws -> [WeightedSample] {
         let decoder = JSONDecoder()
         var samples: [WeightedSample] = []
         for line in try loadLines(dataDir) {
@@ -134,21 +141,51 @@ enum RLTrain {
             if full.count > pl { samples.append(WeightedSample(full: full, promptLen: pl, weight: row.weight)) }
         }
         if samples.isEmpty { throw BridgeError(message: "Weighted dataset has no valid {prompt,completion,weight} rows") }
+        return samples
+    }
 
+    // Cache per-token reference logprobs from the FROZEN base — call BEFORE LoRA.
+    static func cacheWeightedReferences(model: Module, samples: inout [WeightedSample]) {
+        for i in samples.indices {
+            let lp = perTokenLogprobs(model, samples[i].full)
+            eval(lp)
+            samples[i].refLogprobs = lp
+        }
+    }
+
+    // Advantage-weighted policy update WITH a per-token KL penalty to the frozen
+    // reference (DeepSeek's k3 estimator: exp(r) - r - 1, r = ref - pol). The KL
+    // anchor keeps multi-round GRPO from running away from the base.
+    // loss = -advantage * mean(logπθ over completion) + klBeta * mean(KL).
+    static func runWeighted(
+        model: Module, samples: [WeightedSample],
+        iterations: Int, learningRate: Float, klBeta: Float, stepsPerReport: Int,
+        report: (Int, Double, Double) -> Void
+    ) -> Double {
         let optimizer = Adam(learningRate: learningRate)
         var lastLoss = 0.0
+        var klSum = 0.0
         for iter in 0 ..< iterations {
             let s = samples[iter % samples.count]
-            let nTok = Float(max(s.full.count - s.promptLen, 1))
-            let w = MLXArray(-s.weight / nTok) // minimize -weight*logp/ntok -> push logp by sign of weight
+            let mask = completionMask(s.full.count, s.promptLen)
+            let nTok = MLXArray(Float(max(s.full.count - s.promptLen, 1)))
+            let refLP = s.refLogprobs!
+            let advW = MLXArray(-s.weight)
+            let kb = MLXArray(klBeta)
             let lossAndGrad = valueAndGrad(model: model) { (m: Module, _: [MLXArray]) -> [MLXArray] in
-                [w * completionLogprob(m, s.full, s.promptLen)]
+                let polLP = perTokenLogprobs(m, s.full)
+                let advTerm = advW * (polLP * mask).sum() / nTok
+                let rRaw = (refLP - polLP) * mask
+                let r = minimum(maximum(rRaw, MLXArray(-10.0)), MLXArray(10.0))
+                let kl = (exp(r) - r - MLXArray(1.0)).sum() / nTok // r==0 on prompt -> 0
+                return [advTerm + kb * kl, kl]
             }
             let (vals, grad) = lossAndGrad(model, [])
             optimizer.update(model: model, gradients: grad)
-            eval(model, optimizer, vals[0])
+            eval(model, optimizer, vals[0], vals[1])
             lastLoss = Double(vals[0].item(Float.self))
-            if iter % stepsPerReport == 0 { report(iter, lastLoss) }
+            klSum += Double(vals[1].item(Float.self))
+            if iter % stepsPerReport == 0 { report(iter, lastLoss, klSum / Double(iter + 1)) }
         }
         return lastLoss
     }
