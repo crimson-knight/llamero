@@ -3,6 +3,39 @@ require "digest/sha256"
 require "./errors"
 
 module Llamero::Native
+  # Content addressing for a LoRA adapter artifact directory (the `*.safetensors`
+  # weights plus `adapter_config.json`). The single source of truth for the
+  # checksum so a registry descriptor and a distributed training filter agree on
+  # the same id for the same bytes.
+  module AdapterArtifact
+    extend self
+
+    # Sorted list of weight files in an adapter directory.
+    def weight_files(dir : Path | String) : Array(String)
+      Dir.glob(Path[dir].expand.join("*.safetensors").to_s).sort
+    end
+
+    # Stable 16-hex content checksum over the sorted weight files and config.
+    def checksum(dir : Path | String) : String
+      d = Path[dir].expand
+      digest = Digest::SHA256.new
+      files = weight_files(d)
+      config = d.join("adapter_config.json")
+      files << config.to_s if File.exists?(config)
+
+      files.sort.each do |file|
+        digest.update(File.basename(file))
+        File.open(file) do |io|
+          buffer = Bytes.new(65_536)
+          while (read = io.read(buffer)) > 0
+            digest.update(buffer[0, read])
+          end
+        end
+      end
+      digest.final.hexstring[0, 16]
+    end
+  end
+
   # One adapter within an adapter stack: a registered adapter name plus the
   # scale to apply its deltas at. Scale defaults to 1.0 and must be finite.
   struct AdapterSlot
@@ -171,23 +204,10 @@ module Llamero::Native
     end
 
     # Content checksum over the adapter's weight files and config, so the
-    # same artifact always produces the same id in traces.
+    # same artifact always produces the same id in traces. Delegates to
+    # AdapterArtifact so a distributed training filter computes the identical id.
     private def compute_checksum(dir : Path, weight_files : Array(String)) : String
-      digest = Digest::SHA256.new
-      config = dir.join("adapter_config.json")
-      files = weight_files.dup
-      files << config.to_s if File.exists?(config)
-
-      files.sort.each do |file|
-        digest.update(File.basename(file))
-        File.open(file) do |io|
-          buffer = Bytes.new(65_536)
-          while (read = io.read(buffer)) > 0
-            digest.update(buffer[0, read])
-          end
-        end
-      end
-      digest.final.hexstring[0, 16]
+      AdapterArtifact.checksum(dir)
     end
   end
 end

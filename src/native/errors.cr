@@ -155,4 +155,12 @@ module Llamero::Native
       super(message, "speak_failed", recoverable: true)
     end
   end
+
+  # A distributable training filter package failed to load or verify (missing
+  # manifest, or its weights don't match the manifest checksum).
+  class TrainingFilterError < NativeError
+    def initialize(message : String)
+      super(message, "training_filter_invalid", recoverable: false, base_model_loaded: true)
+    end
+  end
 end

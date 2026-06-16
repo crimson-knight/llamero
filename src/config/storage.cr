@@ -25,6 +25,12 @@ module Llamero
       root.join("adapters")
     end
 
+    # Installed distributable "training filter" packages (adapter weights +
+    # `training_filter.json` manifest). Consumer-side discovery scans here.
+    def self.filters_dir : Path
+      root.join("filters")
+    end
+
     def self.lib_dir : Path
       root.join("lib")
     end

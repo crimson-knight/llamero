@@ -187,6 +187,27 @@ module Llamero::Native
       activate_adapters(AdapterStack.none)
     end
 
+    # Register a distributable training filter's adapter under its name so it can
+    # be activated, returning the slot. The filter should already be loaded
+    # (and thus checksum-verified) via `TrainingFilter.load`/`.installed`.
+    def install_filter(filter : TrainingFilter, scale : Float64 = 1.0) : AdapterSlot
+      @registry.register(filter.name, filter.path)
+      AdapterSlot.new(filter.name, scale)
+    end
+
+    # Install and activate a training filter in one call — the consumer-side
+    # "load this library's working knowledge for the session" path. `fuse: true`
+    # bakes it into the resident base at full throughput.
+    def activate_filter(
+      filter : TrainingFilter,
+      fuse : Bool = false,
+      cumulative : Bool = false,
+      scale : Float64 = 1.0,
+    ) : Nil
+      slot = install_filter(filter, scale)
+      activate_adapters(AdapterStack.additive([slot]), fuse: fuse, cumulative: cumulative)
+    end
+
     # Summary of the most recent adapter training run on this session.
     getter last_training : TrainingCompletedEvent?
 
