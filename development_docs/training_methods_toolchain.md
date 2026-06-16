@@ -169,13 +169,31 @@ staged pipeline). The generator and the trainer then speak the same language.
 
 ## Phased roadmap
 
-- **Phase 0 — composable methods (done / in progress).** Unsupervised
+- **Phase 0 — composable methods (done).** Unsupervised
   (`from_text`/`from_documents`, shipped), supervised (`from_pairs_jsonl`,
   shipped), fuse-forward stacking (shipped). Example:
   `examples/train_unsupervised_docs_adapter.cr`.
-- **Phase 1 — doc→data SFT generator.** A Crystal tool: docs → candidate pairs
-  via a llamero model → `BaseGrammar` validation → compile/run verification for
-  code → SFT dataset. Highest immediate value, no bridge changes.
+- **Phase 1 — doc→data generator (shipped, deterministic).** Rather than have a
+  model invent examples (and then filter the invalid ones), Phase 1 is
+  **deterministic and valid-by-construction** — no model in the loop:
+  - **`Llamero::Native::DocExtractor`** pulls the *authored* code examples out of
+    real docs with their context. From Crystal API docs it walks the
+    `crystal docs --format=json` tree (`program.types[]`, recursive) and reads
+    the raw-markdown `doc` on every type and member, extracting fenced code
+    blocks tagged with the symbol's signature. From standalone markdown pages
+    (e.g. an Amber controller guide) it pairs each fenced block with its heading
+    and preceding prose. Output: `to_supervised_dataset` / `to_unsupervised_dataset`
+    or a kind-tagged JSONL corpus.
+  - **`Llamero::Native::ExampleGenerator`** mixes and matches documented chunks
+    into the **full breadth of valid variations** (a template with `slot`s and a
+    `combo` that enumerates subsets of chunks), pruned by `constrain` and
+    confirmed by `verified` (compile-checks each via `crystal build`). Every
+    combination is valid by construction; we only generate valid examples.
+  - Proven end-to-end: `examples/generate_training_from_docs.cr` extracts the
+    Amber guide and generates 28 controller variations, **28/28 compile-verified**.
+    The LLM-assisted variant (a model proposes pairs, `BaseGrammar` + compile
+    verify gate them) remains a *future* option for prose-heavy docs where
+    authored examples are sparse — but the deterministic path is the default.
 - **Phase 2 — DPO.** Preference dataset + pluggable `dpoLoss` in the bridge +
   `method: :dpo`. Fully offline, unlocks the "preference layer".
 - **Phase 3 — GRPO with Crystal reward callbacks.** Generation loop in the
