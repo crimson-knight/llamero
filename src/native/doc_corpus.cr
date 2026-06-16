@@ -140,7 +140,9 @@ module Llamero::Native
           end
           prose.clear
         else
-          prose << line
+          # Strip gitbook/jekyll liquid tags ({% ... %}, {{ ... }}) from prose so
+          # the context isn't polluted with templating noise.
+          prose << line.gsub(/\{%.*?%\}/, "").gsub(/\{\{.*?\}\}/, "")
         end
         i += 1
       end
@@ -233,8 +235,14 @@ module Llamero::Native
       line.lstrip.lchop("```").strip
     end
 
+    # Crystal-ecosystem docs commonly fence Crystal as ```ruby (for syntax
+    # highlighting) or with a bare fence. Treat those as Crystal so the corpus
+    # isn't dominated by mislabeled examples.
+    CRYSTAL_FENCE_ALIASES = {"", "crystal", "cr", "ruby", "rb"}
+
     private def normalize_lang(lang : String) : String
-      lang.empty? ? "crystal" : lang.downcase
+      normalized = lang.downcase.strip
+      CRYSTAL_FENCE_ALIASES.includes?(normalized) ? "crystal" : normalized
     end
   end
 
