@@ -53,7 +53,22 @@ module Llamero::Native
       (lines[0...idx] + lines[(idx + 1)..]).join('\n')
     end
 
-    MUTATIONS = %w(drop-end wrong-return-type typo-method drop-require)
+    # Corrupt a TYPE ANNOTATION to a non-existent type (undefined constant). This
+    # is checked at DEFINITION time, so it surfaces without instantiating the
+    # code — unlike type-mismatch/arity/nil errors, which need a usage harness
+    # (queued: see development_docs). Broadly applicable (most typed code).
+    def corrupt_type_annotation(code : String) : String?
+      # skip comment lines; match a `: Capitalized` annotation in real code
+      code.each_line.with_index do |line, i|
+        next if line.lstrip.starts_with?('#')
+        if m = line.match(/(:\s*)([A-Z][A-Za-z0-9]+)(\??[\s,)\]\n])/)
+          return code.sub(line, line.sub(m[0], "#{m[1]}#{m[2]}Zz#{m[3]}"))
+        end
+      end
+      nil
+    end
+
+    MUTATIONS = %w(corrupt-type drop-require wrong-return-type typo-method drop-end)
 
     def mutate(code : String, name : String) : String?
       case name
@@ -61,6 +76,7 @@ module Llamero::Native
       when "wrong-return-type" then swap_return_type(code)
       when "typo-method"       then typo_method_call(code)
       when "drop-require"      then drop_require(code)
+      when "corrupt-type"      then corrupt_type_annotation(code)
       end
     end
 
