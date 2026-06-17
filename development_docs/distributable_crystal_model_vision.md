@@ -147,6 +147,39 @@ Turn loose, messy documentation into a versioned, phase-tagged corpus.
 - The payoff: instant working knowledge per dependency, fewer tool calls, lower
   cost.
 
+## Implementation status (2026-06-16)
+
+The mechanisms for every phase are built and proven on-device (gemma-3-1b-4bit);
+what remains is throughput/scale, called out per phase.
+
+- **Spine — DONE.** `StagedPipeline` (`src/native/staged_pipeline.cr`) runs
+  unsupervised → SFT → GRPO with fuse-forward between stages. `guard: true` makes
+  it MONOTONIC: it measures the real composed model after each fuse and rolls back
+  (reload + replay kept fuses) any stage that regresses — so a collapsing GRPO
+  stage or re-quant drift can never poison the composition. Validated 0.0 → 1.0.
+- **Phase A — mechanism DONE, agent-scale pending.** `DocExtractor` (docs/markdown
+  → grounded examples), `--verified` compile-gate (drops mislabeled shell blocks
+  and unavailable-symbol snippets), `ExampleGenerator` (valid-by-construction).
+  204 grounded Amber pairs curated. The fan-out agent loop over more Amber topics
+  + a completeness critic is the remaining scale work (budget-gated).
+- **Phase B — pipeline DONE, broad corpus pending.** Full ladder → distributable
+  filter proven end to end (`examples/train_crystal_base.cr`): verified corpus →
+  unsup → SFT → GRPO (guarded) → packed `crystal-base@0.1.0` → consumer-verified.
+  Broadening past `record` syntax to the stdlib/language corpus is the scale-up
+  (same pipeline; feed it `crystal-training extract --shard <crystal> --verified`).
+- **Phase C — composition DONE + measured; runtime stacking deferred.** Fuse-
+  forward proven; N-stage re-quant drift characterized and bounded by the guard
+  (`development_docs/adapter_composition_experiments.md`). Runtime n-way stacking
+  is scoped as deferred research (needs lifting the bridge single-adapter limit).
+- **Phase D — DONE.** `crystal-training` subcommand (`extract` / `adapter`),
+  shells `crystal docs` today; upstreaming into a Crystal::Doc fork swaps the
+  subprocess for a direct call.
+- **Phase E — DONE.** Training-filter package format
+  (`src/native/training_filter.cr`): manifest, checksum verify-on-load,
+  base-model + base-filter compatibility, directory + shard.yml discovery,
+  `session.activate_filter`. A real `amber@0.1.0` filter was shipped from the
+  Amber docs and consumer-verified.
+
 ## Honest unknowns / things to prove
 - N-stage fuse-forward re-quant error compounding (Phase C).
 - Runtime n-way LoRA stacking stability (Phase C) — may or may not be worth

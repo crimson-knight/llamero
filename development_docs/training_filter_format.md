@@ -111,6 +111,42 @@ session.activate_filter(filter, fuse: true)   # bake into the resident base, ful
 (raising `TrainingFilterError` on mismatch); `installed`/`all`/`for_shard` skip
 unreadable or tampered packages so discovery never raises.
 
+## Multi-stage chains (distributing a composition)
+
+A multi-stage fuse-forward composition (e.g. unsupervised → SFT → GRPO, or
+Crystal → Amber → product) is **not** a single LoRA delta: each later stage was
+trained against the base with the earlier stages already fused in, so its weights
+are relative to *that* composed base, not the bare one. Shipping only the last
+adapter and applying it to the bare base produces garbage (observed: a held-out
+that was 0.875 composed dropped to 0.0 when the final stage alone was activated on
+the bare base).
+
+So a composition ships as an ordered **chain**: `pack_chain` writes each kept
+stage's adapter into a `stage-k/` subdir and records the order in
+`manifest.stages`. The consumer reconstructs it by reloading the base and fusing
+each stage forward in order — exactly what the publisher did:
+
+```crystal
+filter = Llamero::Native::TrainingFilter.pack_chain(
+  adapter_dirs: kept_stages.map(&.descriptor.path),   # in fuse order
+  dest: Path["dist/crystal-base.filter"],
+  name: "crystal-base", version: "0.1.0", base_model: model_id,
+  lora: ..., provenance: ..., library: "crystal")
+
+# Consumer: activate_filter replays a chain automatically (reload + fuse each).
+session.activate_filter(filter)   # fuse/cumulative are ignored for chains
+```
+
+`manifest.chain?` is true when `stages` is non-empty; `weights_checksum` then
+covers every stage subdir in order, and `load` verifies all of them (tampering in
+any stage is caught). `install_filter` rejects chains — they must go through
+`activate_filter`, which owns the reload+replay.
+
+This keeps distribution small (adapters, not multi-GB fused checkpoints) while
+reproducing the exact composition. A single library filter that targets an
+already-composed base still ships as a plain one-adapter package and declares that
+base via `base_filter`.
+
 ## Compatibility rules
 
 `filter.compatible_with?(base_model, base_filter)` is true iff:

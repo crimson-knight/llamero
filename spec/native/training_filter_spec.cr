@@ -157,6 +157,62 @@ describe Llamero::Native::TrainingFilter do
     end
   end
 
+  describe "fuse-forward chain packages" do
+    it "packs an ordered chain of stage adapters and round-trips" do
+      with_adapter_dir do |a|
+        with_adapter_dir do |b|
+          tmp_dir do |root|
+            dest = File.join(root, "crystal-base.filter")
+            filter = Llamero::Native::TrainingFilter.pack_chain(
+              adapter_dirs: [a, b], dest: dest,
+              name: "crystal-base", version: "0.1.0",
+              base_model: "mlx-community/gemma-3-1b-it-4bit",
+              lora: lora, provenance: provenance, library: "crystal")
+
+            filter.manifest.chain?.should be_true
+            filter.manifest.stages.should eq(["stage-0", "stage-1"])
+            Dir.exists?(File.join(dest, "stage-0")).should be_true
+            Dir.exists?(File.join(dest, "stage-1")).should be_true
+
+            loaded = Llamero::Native::TrainingFilter.load(dest)
+            loaded.manifest.chain?.should be_true
+            loaded.stage_dirs.map(&.basename).should eq(["stage-0", "stage-1"])
+          end
+        end
+      end
+    end
+
+    it "detects tampering in any stage of a chain" do
+      with_adapter_dir do |a|
+        with_adapter_dir do |b|
+          tmp_dir do |root|
+            dest = File.join(root, "chain.filter")
+            Llamero::Native::TrainingFilter.pack_chain(
+              adapter_dirs: [a, b], dest: dest,
+              name: "chain", version: "0.1.0",
+              base_model: "mlx-community/gemma-3-1b-it-4bit",
+              lora: lora, provenance: provenance)
+            File.write(File.join(dest, "stage-1", "adapters.safetensors"), "tampered!!")
+
+            expect_raises(Llamero::Native::TrainingFilterError, /Checksum mismatch/) do
+              Llamero::Native::TrainingFilter.load(dest)
+            end
+          end
+        end
+      end
+    end
+
+    it "rejects an empty chain" do
+      tmp_dir do |root|
+        expect_raises(ArgumentError, /at least one adapter/) do
+          Llamero::Native::TrainingFilter.pack_chain(
+            adapter_dirs: [] of String, dest: File.join(root, "x.filter"),
+            name: "x", version: "0.1.0", base_model: "m", lora: lora, provenance: provenance)
+        end
+      end
+    end
+  end
+
   describe ".for_shard" do
     it "selects filters whose library is a project dependency" do
       with_adapter_dir do |src|

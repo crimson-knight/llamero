@@ -84,8 +84,15 @@ module Llamero::Native
       getter library_version : String?  # which version of that library
       getter lora : LoRASpec
       getter provenance : Provenance
-      getter weights_checksum : String  # AdapterArtifact.checksum of the packaged weights
+      getter weights_checksum : String  # checksum of the packaged weights (single or chain)
       getter metrics : Hash(String, Float64)
+      # Ordered stage subdirectories for a fuse-forward CHAIN. Empty for a plain
+      # single-adapter filter (weights at the package root). When non-empty, each
+      # entry is a subdir holding one stage's adapter, applied in order: the
+      # consumer reloads the base and fuses each forward to reconstruct the exact
+      # composition the publisher built (a multi-stage composition is a mutated
+      # base, not a single LoRA delta, so it can't ship as one root adapter).
+      getter stages : Array(String)
 
       def initialize(
         @name : String,
@@ -98,12 +105,18 @@ module Llamero::Native
         @library : String? = nil,
         @library_version : String? = nil,
         @metrics : Hash(String, Float64) = {} of String => Float64,
+        @stages : Array(String) = [] of String,
       )
       end
 
       # "name@version" — the canonical id used in base_filter chains and traces.
       def id : String
         "#{name}@#{version}"
+      end
+
+      # True when this filter is a fuse-forward chain of stage adapters.
+      def chain? : Bool
+        !@stages.empty?
       end
     end
 
@@ -155,7 +168,7 @@ module Llamero::Native
         base_model: base_model,
         lora: lora,
         provenance: provenance,
-        weights_checksum: AdapterArtifact.checksum(pkg),
+        weights_checksum: package_checksum(pkg, [] of String),
         base_filter: base_filter,
         library: library,
         library_version: library_version,
@@ -163,6 +176,78 @@ module Llamero::Native
       )
       File.write(pkg.join(MANIFEST_FILE), manifest.to_pretty_json)
       new(manifest, pkg)
+    end
+
+    # Package an ordered fuse-forward CHAIN of stage adapters into one filter. The
+    # consumer reloads the base and fuses each stage forward in order to
+    # reconstruct the exact composition — the only correct way to ship a
+    # multi-stage composition, since each later stage's delta is relative to the
+    # base with the earlier stages already fused in (not the bare base).
+    def self.pack_chain(
+      adapter_dirs : Array(Path) | Array(String),
+      dest : Path | String,
+      name : String,
+      version : String,
+      base_model : String,
+      lora : LoRASpec,
+      provenance : Provenance,
+      base_filter : String? = nil,
+      library : String? = nil,
+      library_version : String? = nil,
+      metrics : Hash(String, Float64) = {} of String => Float64,
+    ) : TrainingFilter
+      raise ArgumentError.new("pack_chain needs at least one adapter") if adapter_dirs.empty?
+      pkg = Path[dest].expand
+      Dir.mkdir_p(pkg)
+
+      stages = [] of String
+      adapter_dirs.each_with_index do |dir, i|
+        src = Path[dir].expand
+        raise ArgumentError.new("Adapter directory does not exist: #{src}") unless Dir.exists?(src)
+        weights = AdapterArtifact.weight_files(src)
+        raise ArgumentError.new("Adapter directory #{src} has no .safetensors weights") if weights.empty?
+        sub = "stage-#{i}"
+        stage_out = pkg.join(sub)
+        Dir.mkdir_p(stage_out)
+        weights.each { |w| File.copy(w, stage_out.join(File.basename(w))) }
+        config = src.join("adapter_config.json")
+        File.copy(config, stage_out.join("adapter_config.json")) if File.exists?(config)
+        stages << sub
+      end
+
+      manifest = Manifest.new(
+        name: name,
+        version: version,
+        base_model: base_model,
+        lora: lora,
+        provenance: provenance,
+        weights_checksum: package_checksum(pkg, stages),
+        base_filter: base_filter,
+        library: library,
+        library_version: library_version,
+        metrics: metrics,
+        stages: stages,
+      )
+      File.write(pkg.join(MANIFEST_FILE), manifest.to_pretty_json)
+      new(manifest, pkg)
+    end
+
+    # Content checksum over a package: the root adapter for a single filter, or
+    # every stage subdir in order for a chain. One source of truth for pack+load.
+    def self.package_checksum(pkg : Path, stages : Array(String)) : String
+      return AdapterArtifact.checksum(pkg) if stages.empty?
+      digest = Digest::SHA256.new
+      stages.each do |s|
+        digest.update(s)
+        digest.update(AdapterArtifact.checksum(pkg.join(s)))
+      end
+      digest.final.hexstring[0, 16]
+    end
+
+    # Absolute paths to the stage adapter dirs, in fuse order (empty for a single
+    # filter — its weights live at the package root).
+    def stage_dirs : Array(Path)
+      @manifest.stages.map { |s| @path.join(s) }
     end
 
     # Load a filter package, verifying the on-disk weights match the manifest's
@@ -177,7 +262,7 @@ module Llamero::Native
       manifest = Manifest.from_json(File.read(manifest_path))
 
       if verify
-        actual = AdapterArtifact.checksum(pkg)
+        actual = package_checksum(pkg, manifest.stages)
         if actual != manifest.weights_checksum
           raise TrainingFilterError.new(
             "Checksum mismatch for #{manifest.id}: manifest #{manifest.weights_checksum}, on-disk #{actual}")

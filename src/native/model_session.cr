@@ -190,7 +190,9 @@ module Llamero::Native
     # Register a distributable training filter's adapter under its name so it can
     # be activated, returning the slot. The filter should already be loaded
     # (and thus checksum-verified) via `TrainingFilter.load`/`.installed`.
+    # Single-adapter filters only; use `activate_filter` for chains.
     def install_filter(filter : TrainingFilter, scale : Float64 = 1.0) : AdapterSlot
+      raise ArgumentError.new("#{filter.id} is a fuse-forward chain; use activate_filter") if filter.manifest.chain?
       @registry.register(filter.name, filter.path)
       AdapterSlot.new(filter.name, scale)
     end
@@ -198,14 +200,28 @@ module Llamero::Native
     # Install and activate a training filter in one call — the consumer-side
     # "load this library's working knowledge for the session" path. `fuse: true`
     # bakes it into the resident base at full throughput.
+    #
+    # A fuse-forward CHAIN filter is always reconstructed by reloading the base
+    # and fusing each stage forward in order (the only correct way to apply a
+    # multi-stage composition); `fuse`/`cumulative` are ignored for chains.
     def activate_filter(
       filter : TrainingFilter,
       fuse : Bool = false,
       cumulative : Bool = false,
       scale : Float64 = 1.0,
     ) : Nil
-      slot = install_filter(filter, scale)
-      activate_adapters(AdapterStack.additive([slot]), fuse: fuse, cumulative: cumulative)
+      if filter.manifest.chain?
+        load_model
+        filter.stage_dirs.each_with_index do |dir, i|
+          stage_name = "#{filter.name}-stage-#{i}"
+          @registry.register(stage_name, dir)
+          activate_adapters(
+            AdapterStack.additive([AdapterSlot.new(stage_name)]), fuse: true, cumulative: true)
+        end
+      else
+        slot = install_filter(filter, scale)
+        activate_adapters(AdapterStack.additive([slot]), fuse: fuse, cumulative: cumulative)
+      end
     end
 
     # Summary of the most recent adapter training run on this session.
