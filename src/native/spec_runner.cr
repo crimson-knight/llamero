@@ -18,15 +18,29 @@ module Llamero::Native
 
     record SpecResult, passed : Bool, output : String
 
-    def run(impl : String, spec_body : String) : SpecResult
+    # Generated specs can DEADLOCK (concurrency/`sleep`), so every run is bounded
+    # by a timeout — a timed-out spec is a FAIL (and the deadlocked binary is
+    # swept). Without this the gate hangs forever on one bad candidate.
+    def run(impl : String, spec_body : String, timeout : Time::Span = 15.seconds) : SpecResult
       dir = File.tempname("specrun")
       Dir.mkdir_p(dir)
       File.write(File.join(dir, "impl.cr"), impl)
       File.write(File.join(dir, "impl_spec.cr"), wrap(spec_body))
       buf = IO::Memory.new
-      status = Process.run("crystal", ["spec", "impl_spec.cr"],
+      process = Process.new("crystal", ["spec", "--no-color", "impl_spec.cr"],
         chdir: dir, output: buf, error: buf)
-      SpecResult.new(status.success?, clean(buf.to_s))
+      # Explicit timeout: whichever fiber sends first wins (buffered channel).
+      result = Channel(Process::Status?).new(1)
+      spawn { result.send(process.wait) rescue result.send(nil) }
+      spawn { sleep timeout; result.send(nil) }
+      if status = result.receive
+        SpecResult.new(status.success?, clean(buf.to_s))
+      else
+        process.terminate(graceful: false) rescue nil
+        # the deadlocked spec is a compiled grandchild of `crystal spec` — sweep it
+        Process.run("pkill", ["-9", "-f", "crystal-run-spec.tmp"]) rescue nil
+        SpecResult.new(false, "TIMEOUT after #{timeout.total_seconds.to_i}s")
+      end
     rescue ex
       SpecResult.new(false, ex.message || "spec run failed")
     ensure

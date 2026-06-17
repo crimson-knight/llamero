@@ -23,7 +23,7 @@ Dir.glob(File.join(indir, "*.jsonl")).sort.each do |f|
     next if impl.blank? || spec.blank?
     raw += 1
     total += 1
-    STDERR.print "\r  gating #{total}... kept #{kept.size}"
+    STDERR.puts "  [#{Time.local.to_s("%H:%M:%S")}] gating #{total} (#{cat})... kept #{kept.size}"
     if SR.meaningful?(impl, spec)
       kept << {impl: impl, spec: spec, category: cat}
       keep += 1
