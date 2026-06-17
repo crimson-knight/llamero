@@ -13,6 +13,10 @@ crystal: '>= 1.11.2'
 
 license: MIT
 
+targets:
+  crystal-training:
+    main: src/tools/crystal_training.cr
+
 dependencies:
   crinja:
     github: straight-shoota/crinja
