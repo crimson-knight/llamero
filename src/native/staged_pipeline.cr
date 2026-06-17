@@ -60,20 +60,22 @@ module Llamero::Native
     # StageResult — per-stage held-out tracking for the composed model as it grows.
     #
     # With `guard: true` (requires `measure`) the pipeline is MONOTONIC: each
-    # stage is first evaluated as a *live* (non-fused) adapter on the current
-    # composed base, and is only fused forward if it does not regress the measure
-    # by more than `tolerance`. A stage that collapses the model (a classic GRPO
-    # failure on a saturated reward) is dropped, so the composed model can never
-    # end up worse than an earlier stage. Live evaluation is used because it does
-    # not mutate the resident weights, so a dropped stage leaves the in-memory
-    # composition untouched (a non-cumulative *fuse* would force a base reload and
-    # lose every prior fused-forward stage).
+    # stage is fused forward and then the REAL composed model is measured; if it
+    # regresses the measure by more than `tolerance` the stage is ROLLED BACK
+    # (the base is reloaded and every kept stage's fuse is replayed to reconstruct
+    # the composition without it). So the composed model can never end up worse
+    # than an earlier stage. Measuring AFTER the fuse — not a live preview — is
+    # what catches BOTH a collapsing adapter (a classic GRPO failure on a
+    # saturated reward) AND fuse-induced re-quant drift, which a pre-fuse live
+    # evaluation cannot see (re-quantization happens during the fuse itself; see
+    # development_docs/adapter_composition_experiments.md).
     #
     # The resident base ends as the fully-composed model; call
     # `session.load_model` to reset.
     def run(measure : (-> Float64)? = nil, guard : Bool = false, tolerance : Float64 = 0.0, & : Int32, String ->) : Array(StageResult)
       raise ArgumentError.new("guard: true requires a measure proc") if guard && measure.nil?
       results = [] of StageResult
+      kept = [] of AdapterDescriptor
       best = guard ? measure.not_nil!.call : nil
       @stages.each_with_index do |entry, index|
         name, thunk = entry
@@ -82,27 +84,38 @@ module Llamero::Native
         slot_stack = AdapterStack.additive([AdapterSlot.new(descriptor.name)])
 
         if guard && (m = measure) && (baseline = best)
-          # Evaluate as a LIVE adapter (no weight mutation -> freely reversible).
-          @session.activate_adapters(slot_stack, fuse: false)
+          # Fuse forward, then measure the real composed model.
+          @session.activate_adapters(slot_stack, fuse: true, cumulative: true)
           score = m.call
           if score >= baseline - tolerance
-            # Keep: drop the live adapter, then permanently fuse it forward.
-            @session.deactivate_adapters
-            @session.activate_adapters(slot_stack, fuse: true, cumulative: true)
+            kept << descriptor
             best = score
             results << StageResult.new(name, descriptor, score, kept: true)
           else
-            # Regression: drop the live adapter; composed base is unchanged.
-            @session.deactivate_adapters
+            # Regression (bad adapter or re-quant drift): reconstruct the
+            # composition without this stage by reloading and replaying the kept
+            # fuses.
+            replay(kept)
             results << StageResult.new(name, descriptor, score, kept: false)
           end
         else
           @session.activate_adapters(slot_stack, fuse: true, cumulative: true)
+          kept << descriptor
           score = measure.try &.call
           results << StageResult.new(name, descriptor, score, kept: true)
         end
       end
       results
+    end
+
+    # Reload the base and replay every kept stage's cumulative fuse, so the
+    # resident model becomes exactly the composition of `descriptors` (in order).
+    private def replay(descriptors : Array(AdapterDescriptor)) : Nil
+      @session.load_model
+      descriptors.each do |d|
+        @session.activate_adapters(
+          AdapterStack.additive([AdapterSlot.new(d.name)]), fuse: true, cumulative: true)
+      end
     end
 
     def run(measure : (-> Float64)? = nil, guard : Bool = false, tolerance : Float64 = 0.0) : Array(StageResult)
