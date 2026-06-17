@@ -185,11 +185,22 @@ solid, and it's where the 4B→1B delegation gets exercised for real.
 6. **Layered-stacking experiment** — lift the bridge limit; measure order/scale/N.
 7. **End-to-end task RL** — generate+compile+test whole apps; reward tool use.
 
-## Open decisions for the owner
-- Tool-call output format (custom `<tool_call>` JSON vs a base-model template)?
-- Thinking format: separate `<thinking>` block vs an inline plan preamble (depends
-  on whether we target a thinking-capable base or stay on Gemma)?
-- Which Crystal versions to snapshot for the version-diff (e.g. 1.0, 1.6, 1.10,
-  1.14, current)?
-- Is the open-source `crystal` filter pinned per Crystal version (one filter per
-  toolchain) or version-aware-in-one?
+## Decisions (locked 2026-06-17)
+- **Tool-call format**: custom JSON that maps to a `Llamero::BaseGrammar` — so it
+  parses with the normal `chat_structured` machinery. Implemented as
+  `Llamero::ToolCall` + `Llamero::AgenticPlan` (`src/grammars/tool_call.cr`):
+  `{"plan": "...", "tool_calls": [{"tool":"write_file","path":...,"content":...}]}`.
+  Tools: write_file / read_file / look_up / run. Note: file `content` must be
+  JSON-escaped (newlines as `\n`) — a corpus requirement.
+- **Thinking format**: support BOTH, but the current Gemma bases don't think, so
+  default to the **inline plan-then-act** preamble (the `plan` field on
+  AgenticPlan). The harness picks per base capability; a thinking-capable base can
+  route a separate `<thinking>` block and leave `plan` as the committed plan.
+- **Version diff**: **1.14.0 ↔ 1.20.0** only (1.14 is ~2yr old at quarterly minors
+  — enough signal). DONE (Phase 1b): `examples/extract_crystal_version_facts.py`
+  diffs the stdlib source between tags → 58 version-fact pairs
+  (`training_data/crystal/version_facts.jsonl`): 26 newly-deprecated symbols (incl.
+  the monotonic clock → `Time.instant`) + 32 genuinely-new subsystems (incl.
+  `fiber/execution_context`, the new `event_loop` impls, `float/fast_float`).
+- **One version-aware Crystal filter** (not per-toolchain) — a single solid base
+  the Amber filter fuse-forwards onto.
