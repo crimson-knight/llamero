@@ -20,23 +20,43 @@ def git(*args):
 DEP_RE = re.compile(r'@\[Deprecated\((?:"([^"]*)")?')
 SYM_RE = re.compile(r'^\s*(?:def|macro|class|struct|module|enum|abstract def|abstract class)\s+([A-Za-z_][\w:.#?!=]*)')
 
+TYPE_RE = re.compile(r'^\s*(?:abstract\s+)?(?:class|struct|module|enum)\s+([A-Z][\w:]*)')
+
 def deprecations(tag):
-    """ {symbol: message} for @[Deprecated] annotations in src/ at `tag`. """
-    out = git("grep", "-n", "-A1", "-e", r"@\[Deprecated", tag, "--", "src/*.cr")
+    """ {Owner#symbol: message} — OWNER-SCOPED so we never emit bare `split`/
+    `initialize` (Codex). The owner is the nearest enclosing class/struct/module
+    at a lower indent than the deprecated def. """
+    files = set()
+    for entry in git("grep", "-l", "-e", r"@\[Deprecated", tag, "--", "src/*.cr").splitlines():
+        files.add(entry.split(":", 1)[1] if ":" in entry else entry)
     found = {}
-    lines = out.splitlines()
-    for i, ln in enumerate(lines):
-        m = DEP_RE.search(ln)
-        if not m:
-            continue
-        msg = m.group(1) or ""
-        # the symbol is on a following context line (prefixed `tag-file-lineno-` or `tag:file:lineno:`)
-        for j in range(i + 1, min(i + 4, len(lines))):
-            body = re.sub(r'^[^:]+[:\-][^:]+[:\-]\d+[:\-]', '', lines[j])
-            sm = SYM_RE.match(body)
-            if sm:
-                found[sm.group(1)] = msg
+    for path in files:
+        lines = git("show", f"{tag}:{path}").splitlines()
+        for i, ln in enumerate(lines):
+            m = DEP_RE.search(ln)
+            if not m:
+                continue
+            msg = m.group(1) or ""
+            sym = sidx = None
+            for j in range(i + 1, min(i + 5, len(lines))):
+                s = lines[j].strip()
+                if s.startswith("@["):
+                    continue
+                sm = SYM_RE.match(lines[j])
+                if sm:
+                    sym, sidx = sm.group(1), j
                 break
+            if not sym:
+                continue
+            sym_indent = len(lines[sidx]) - len(lines[sidx].lstrip())
+            owner = None
+            for k in range(sidx - 1, -1, -1):
+                ti = len(lines[k]) - len(lines[k].lstrip())
+                tm = TYPE_RE.match(lines[k])
+                if tm and ti < sym_indent:
+                    owner = tm.group(1)
+                    break
+            found[f"{owner}#{sym}" if owner else sym] = msg
     return found
 
 def dirs_at(tag):
@@ -49,9 +69,14 @@ def dirs_at(tag):
             ds.add("/".join(parts[:i]))
     return ds
 
+# Compiler/binding internals users don't write against — keep them out of the
+# app-level corpus (Codex: many "new subsystems" were compiler/lib_c internals).
+INTERNAL = ("src/compiler", "src/lib_c", "src/llvm", "src/crystal/system")
+
 def new_subsystems(old, new):
-    """ directories that EXIST at `new` but did NOT exist at `old` (genuinely new). """
-    return sorted(dirs_at(new) - dirs_at(old))
+    """ user-relevant directories that EXIST at `new` but not `old`. """
+    return sorted(d for d in (dirs_at(new) - dirs_at(old))
+                  if not d.startswith(INTERNAL))
 
 def example_file(tag, d):
     out = git("ls-tree", "-r", "--name-only", tag, "--", d + "/")

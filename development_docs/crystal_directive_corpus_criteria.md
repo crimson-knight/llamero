@@ -20,9 +20,15 @@ unsupervised pretraining only; SFT/RL need directive→implementation pairs.
   2. **Contextual edit**: given existing code in the prompt, "Update the `show`
      action to return 404 when the record is missing." → ONLY the changed code.
 - **Completion = complete, idiomatic, latest-Crystal implementation:**
-  - Fully typed: every method parameter typed AND an explicit return type.
-  - Descriptive names (AED conventions): no single-letter/abbreviated names;
-    `is_/has_` booleans; `list_of_`/`collection_of_` collections.
+  - Typed PUBLIC API: method parameters + explicit return types on public
+    methods. Locals are typed only when it aids clarity (Crystal infers locals
+    and block args — over-typing everything reads unidiomatic). [Codex]
+  - **Idiomatic Crystal naming (decided 2026-06-17): the public `crystal` filter
+    uses standard Crystal idiom — `?`-predicates (`empty?`, `valid?`, `active?`),
+    plural nouns for collections (`users`, `line_items`, `orders_by_id`).** Do NOT
+    use the AED `is_/has_/list_of_` conventions here — those belong to the Amber/
+    product filter that layers on top. Idiomatic short names are fine where
+    conventional (`io`, `id`, `db`, `i`, `x`, `y`, `e`, tight block vars). [Codex]
   - **Latest idiom only — Crystal 1.20.x.** NO APIs deprecated in 1.20 (e.g. use
     `Time.instant`, never the deprecated monotonic clock; the 26-symbol
     deprecation list is in `training_data/crystal/version_facts.jsonl`).
