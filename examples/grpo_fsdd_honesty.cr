@@ -13,7 +13,7 @@
 require "../src/llamero"
 
 MODEL    = ARGV[0]? || "mlx-community/gemma-3-4b-it-4bit"
-SFT_ITER = (ARGV[1]? || "300").to_i
+SFT_ITER = (ARGV[1]? || "100").to_i
 ROUNDS   = (ARGV[2]? || "2").to_i
 SAMPLES  = (ARGV[3]? || "6").to_i
 
@@ -86,40 +86,33 @@ def cfg(iters, layers = 16)
   c.iterations = iters
   c.num_layers = layers
   c.batch_size = 1
-  c.learning_rate = 1e-4
+  c.learning_rate = 5e-5 # gentle — 1e-4 over-trained/collapsed the 4b
   c.steps_per_report = 50
   c
 end
 
-# SFT warm-start on the FSDD corpus (the honest behavior to amplify).
-sft_mean = before[:mean]
-if File.exists?(FSDD_CORPUS)
-  puts "\n=== SFT warm-start (#{SFT_ITER} iters) on #{FSDD_CORPUS} ==="
-  ds = Llamero::Native::TrainingDataset.from_corpus_jsonl(FSDD_CORPUS, only: :pair, system_prompt: SYSTEM)
-  session.train_adapter("fsdd-sft", ds, cfg(SFT_ITER))
-  session.activate_adapters(Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new("fsdd-sft")]), fuse: true, cumulative: true)
-  mid = assess(session, reward, judge, HELDOUT)
-  sft_mean = mid[:mean]
-  puts "after SFT: #{mid}"
-else
-  puts "\n(no FSDD corpus; skipping SFT — run the curation first)"
-end
-
-# GRPO with the honesty+compile reward. Collapse guard: revert if it regresses.
-puts "\n=== GRPO (honesty+compile reward, #{ROUNDS} rounds x #{SAMPLES} samples) ==="
-gcfg = cfg(30)
+# Train via the drift-robust MONOTONIC pipeline: SFT then GRPO, each fused forward
+# and measured; any stage that regresses the mean reward (collapse or re-quant
+# drift — the amber-v2 base is already a fuse chain) is ROLLED BACK, so the model
+# is never worse than the baseline. Gentle config to avoid over-training the 4b.
+gcfg = cfg(30, 8)
 gcfg.kl_beta = 0.2
-session.grpo_train("fsdd-honesty", HELDOUT, reward_fn, config: gcfg, rounds: ROUNDS, samples: SAMPLES, max_tokens: 240)
-session.activate_adapters(Llamero::Native::AdapterStack.additive([Llamero::Native::AdapterSlot.new("fsdd-honesty")]))
-after = assess(session, reward, judge, HELDOUT)
-kept_grpo = after[:mean] >= sft_mean
-unless kept_grpo
-  puts "GRPO regressed (#{after[:mean]} < SFT #{sft_mean}) -> reverting to the SFT base"
-  session.deactivate_adapters
-  after = assess(session, reward, judge, HELDOUT)
+measure = -> { assess(session, reward, judge, HELDOUT)[:mean] }
+
+if File.exists?(FSDD_CORPUS)
+  ds = Llamero::Native::TrainingDataset.from_corpus_jsonl(FSDD_CORPUS, only: :pair, system_prompt: SYSTEM)
+  pipeline = Llamero::Native::StagedPipeline.new(session, "fsdd-honesty")
+  pipeline.supervised("sft", ds, cfg(SFT_ITER, 8))
+  pipeline.grpo("polish", HELDOUT, reward_fn, gcfg, rounds: ROUNDS, samples: SAMPLES)
+  puts "\n=== monotonic SFT -> GRPO (guarded; rolls back any collapsing stage) ==="
+  results = pipeline.run(measure, guard: true) { |i, name| puts "  stage #{i}: #{name} (#{Time.local})" }
+  results.each { |r| puts "  #{r.name.ljust(7)}: reward=#{r.score}  #{r.kept ? "KEPT" : "DROPPED (rolled back)"}" }
+else
+  puts "\n(no FSDD corpus; skipping training — run the curation first)"
 end
 
-puts "\n=== AFTER (#{kept_grpo ? "GRPO kept" : "reverted to SFT"}) ==="
+after = assess(session, reward, judge, HELDOUT)
+puts "\n=== AFTER ==="
 puts after
 puts "\n-- sample (under-specified -> want honest typed stub):\n#{sample.call(HELDOUT[1])}"
 runtime.close
