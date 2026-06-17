@@ -7,13 +7,17 @@ to an SVG so progress is visually explainable. Stdlib only (no matplotlib).
 import json, os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG = os.path.join(ROOT, "training_data", "metrics", "honesty_runs.jsonl")
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "training_data", "metrics", "honesty_progress.svg")
+MDIR = os.path.join(ROOT, "training_data", "metrics")
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(MDIR, "honesty_progress.svg")
 
-runs = [json.loads(l) for l in open(LOG) if l.strip()]
+runs = []
+for log in ("honesty_runs.jsonl", "crystal_runs.jsonl"):
+    p = os.path.join(MDIR, log)
+    if os.path.exists(p):
+        runs += [json.loads(l) for l in open(p) if l.strip()]
 
-W, H = 830, 560
-PANEL_X, PANEL_Y, PANEL_W, PANEL_H = 60, 70, 560, 360
+W, H = 1040, 560
+PANEL_X, PANEL_Y, PANEL_W, PANEL_H = 60, 70, 770, 360
 y0, y1 = PANEL_Y + PANEL_H, PANEL_Y           # reward 0 .. 1 maps y0 .. y1
 COLORS = {"good": "#2e9e5b", "bad": "#cf3b3b", "neutral": "#3b6fcf"}
 
@@ -39,11 +43,10 @@ bands = [(0.0,0.1,"foreign/syntax (lying)","#f3dada"),(0.1,0.5,"fabricated / wro
 for lo,hi,lab,col in bands:
     add(f'<rect x="{PANEL_X+PANEL_W+6}" y="{yv(hi):.0f}" width="14" height="{yv(lo)-yv(hi):.0f}" fill="{col}"/>')
 
-run_colors = ["bad", "bad", "good"]
 xstep = PANEL_W / (len(runs) + 1)
 for i, run in enumerate(runs):
     cx = PANEL_X + xstep * (i + 1)
-    col = COLORS[run_colors[i]]
+    col = COLORS["good" if "improv" in run.get("outcome", "") else "bad"]
     stages = run["stages"]
     sw = min(120, xstep * 0.7)
     xs = [cx - sw/2 + sw * (j/(len(stages)-1)) for j in range(len(stages))]
@@ -62,8 +65,8 @@ add(f'<text x="{PANEL_X+PANEL_W-14}" y="{PANEL_Y-12}" font-size="11" fill="#555"
 for lo, hi, lab, col in bands:
     add(f'<text x="{PANEL_X+PANEL_W+24}" y="{(yv(lo)+yv(hi))/2+3:.0f}" font-size="8.5" fill="#777">{lab}</text>')
 
-add(f'<text x="30" y="{H-30}" font-size="11" fill="#777">Run 1 &amp; 2 collapsed (no guard / re-quant drift past ~3 fuses).</text>')
-add(f'<text x="30" y="{H-15}" font-size="11" fill="#777">Run 3 (4b bare + monotonic guard): SFT improved 0.10&#8594;0.22, guard rolled back the collapsing GRPO, final 0.28 — honest scaffolds (4/5), no foreign garbage.</text>')
+add(f'<text x="30" y="{H-30}" font-size="11" fill="#777">Green = the monotonic guard kept the model improving; red = collapsed (no guard / re-quant drift). The guard rolls back any regressing stage.</text>')
+add(f'<text x="30" y="{H-15}" font-size="11" fill="#777">crystal@1.20 filter: unsupervised stdlib stage KEPT (compile 3/6&#8594;5/6, reward 0.5&#8594;0.83); SFT + GRPO regressed and were dropped.</text>')
 add('</svg>')
 
 open(OUT, "w").write("\n".join(parts))
