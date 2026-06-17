@@ -99,6 +99,7 @@ gcfg = cfg(30, 8)
 gcfg.kl_beta = 0.2
 measure = -> { assess(session, reward, judge, HELDOUT)[:mean] }
 
+results = [] of Llamero::Native::StagedPipeline::StageResult
 if File.exists?(FSDD_CORPUS)
   ds = Llamero::Native::TrainingDataset.from_corpus_jsonl(FSDD_CORPUS, only: :pair, system_prompt: SYSTEM)
   pipeline = Llamero::Native::StagedPipeline.new(session, "fsdd-honesty")
@@ -126,4 +127,28 @@ if after[:mean] > before[:mean]
   puts "HONESTY GRPO improved the model: more grounded, honest, type-checking code."
 else
   puts "no net improvement this run (tune iters/rounds/samples or the base)."
+end
+
+# Append to the metrics log so progress stays visually trackable
+# (python3 examples/plot_training_progress.py re-charts it).
+metrics_dir = Path[__DIR__].parent.join("training_data", "metrics")
+if Dir.exists?(metrics_dir.to_s)
+  stages = [{name: "baseline", reward: before[:mean]}]
+  results.each { |r| stages << {name: r.kept ? r.name : "#{r.name} (DROPPED)", reward: (r.score || 0.0)} }
+  stages << {name: "final", reward: after[:mean]}
+  rec = {
+    run:      "#{MODEL.split('/').last}#{ENV["BASE_FILTER"]? ? " +filter" : ""}",
+    base:     MODEL,
+    guard:    true,
+    judge:    judge.available?,
+    stages:   stages,
+    behavior: {
+      honest:   [before[:honest], after[:honest]],
+      compiles: [before[:compiles], after[:compiles]],
+      lying:    [before[:foreign] + before[:broken], after[:foreign] + after[:broken]],
+    },
+    outcome: after[:mean] > before[:mean] ? "improved" : "no net gain",
+  }
+  File.open(metrics_dir.join("honesty_runs.jsonl").to_s, "a") { |io| io.puts(rec.to_json) }
+  puts "logged run -> #{metrics_dir.join("honesty_runs.jsonl")} (re-chart: python3 examples/plot_training_progress.py)"
 end
