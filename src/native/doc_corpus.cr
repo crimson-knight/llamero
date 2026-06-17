@@ -155,6 +155,16 @@ module Llamero::Native
       @examples.select { |ex| ex.language == "crystal" }
     end
 
+    # Crystal examples that actually type-check (`crystal build --no-codegen`).
+    # The deterministic verifier gate from the vision: drops mislabeled shell
+    # blocks and snippets that reference unavailable symbols, keeping only
+    # self-contained, compilable examples. Note: framework examples that depend
+    # on the framework being in scope will be dropped unless it's available to
+    # the compiler — use this for language/stdlib corpora, not bare framework docs.
+    def compile_verified : Array(DocExample)
+      crystal_examples.select { |ex| ExampleGenerator.compiles?(ex.code) }
+    end
+
     # Supervised dataset of (context -> code) pairs.
     def to_supervised_dataset(crystal_only : Bool = true) : TrainingDataset
       ds = TrainingDataset.new
@@ -170,9 +180,14 @@ module Llamero::Native
     # Write a kind-tagged JSONL corpus (the consistent multi-method format).
     # `kind` is :pair (SFT) or :text (unsupervised).
     def write_corpus_jsonl(path : Path | String, kind : Symbol = :pair, crystal_only : Bool = true) : Int32
-      list = crystal_only ? crystal_examples : @examples
+      write_corpus_jsonl(path, crystal_only ? crystal_examples : @examples, kind)
+    end
+
+    # Write a specific list of examples (e.g. a `compile_verified` subset) as a
+    # kind-tagged corpus.
+    def write_corpus_jsonl(path : Path | String, examples : Array(DocExample), kind : Symbol = :pair) : Int32
       File.open(Path[path].expand.to_s, "w") do |file|
-        list.each do |ex|
+        examples.each do |ex|
           case kind
           when :pair then file.puts({kind: "pair", prompt: ex.context, completion: ex.code}.to_json)
           when :text then file.puts({kind: "text", text: ex.to_text}.to_json)
@@ -180,7 +195,7 @@ module Llamero::Native
           end
         end
       end
-      list.size
+      examples.size
     end
 
     # ---- markdown fence helpers ----

@@ -44,6 +44,12 @@ crystal-training extract --markdown docs/ --out amber.jsonl --kind text
 - Crystal-only by default (drops shell/yaml/etc. fences); `--all-languages`
   keeps everything. Crystal-ecosystem docs that fence Crystal as ` ```ruby ` are
   normalized to Crystal, so the corpus isn't dominated by mislabeled examples.
+- `--verified` keeps only examples that type-check (`crystal build --no-codegen`)
+  — the deterministic verifier gate from the vision. It drops mislabeled shell
+  blocks (a bare-fenced `$ amber db migrate` reads as Crystal otherwise) and
+  snippets referencing unavailable symbols. Use it for language/stdlib corpora;
+  bare framework examples need the framework in scope to compile, so it
+  over-rejects there (train those unverified, or compile within the project).
 - No `--out` streams the corpus to stdout (pipe it onward).
 
 Every example is authored (pulled verbatim from real docs), so the corpus is

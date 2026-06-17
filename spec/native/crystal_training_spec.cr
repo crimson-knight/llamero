@@ -84,6 +84,51 @@ describe Llamero::Native::CrystalTraining do
     end
   end
 
+  it "drops non-compiling examples with --verified" do
+    dir = File.join(Dir.tempdir, "llamero-ct-ver-#{Random::Secure.hex(6)}")
+    Dir.mkdir_p(dir)
+    begin
+      File.write(File.join(dir, "mix.md"), <<-MD)
+      # Good
+
+      ```crystal
+      puts [1, 2, 3].map { |n| n * 2 }
+      ```
+
+      # Bad
+
+      ```crystal
+      NonexistentThing.frobnicate(whatever)
+      ```
+
+      # Shell mislabeled as Crystal
+
+      ```
+      $ amber db migrate
+      ```
+      MD
+
+      _, raw, _ = run_ct(["extract", "--markdown", dir, "--kind", "pair"])
+      raw.each_line.reject(&.strip.empty?).to_a.size.should eq(3)
+
+      code, verified, _ = run_ct(["extract", "--markdown", dir, "--kind", "pair", "--verified"])
+      code.should eq(0)
+      lines = verified.each_line.reject(&.strip.empty?).to_a
+      lines.size.should eq(1)
+      JSON.parse(lines.first)["completion"].as_s.should contain("map")
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "rejects --verified combined with --all-languages" do
+    with_docs do |dir|
+      code, _, err = run_ct(["extract", "--markdown", dir, "--verified", "--all-languages"])
+      code.should eq(1)
+      err.should contain("--verified applies to Crystal examples")
+    end
+  end
+
   it "rejects an invalid --kind" do
     with_docs do |dir|
       code, _, err = run_ct(["extract", "--markdown", dir, "--kind", "bogus"])

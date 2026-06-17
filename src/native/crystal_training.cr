@@ -106,6 +106,7 @@ module Llamero::Native
       out = nil.as(String?)
       kind = "pair"
       crystal_only = true
+      verified = false
       project_name = "doc"
       project_version = "0.0"
 
@@ -115,6 +116,7 @@ module Llamero::Native
         p.on("--out PATH", "corpus output path") { |v| out = v }
         p.on("--kind KIND", "pair|text") { |v| kind = v }
         p.on("--all-languages", "keep non-Crystal fences") { crystal_only = false }
+        p.on("--verified", "keep only examples that type-check") { verified = true }
         p.on("--project-name N", "") { |v| project_name = v }
         p.on("--project-version V", "") { |v| project_version = v }
       end
@@ -125,13 +127,20 @@ module Llamero::Native
                  when "text" then :text
                  else             raise ArgumentError.new("--kind must be pair or text")
                  end
+      raise ArgumentError.new("--verified applies to Crystal examples; drop --all-languages") if verified && !crystal_only
 
       extractor = extractor_for(shard, markdown, project_name, project_version)
-      examples = crystal_only ? extractor.crystal_examples : extractor.examples
+      examples = if verified
+                   extractor.compile_verified
+                 elsif crystal_only
+                   extractor.crystal_examples
+                 else
+                   extractor.examples
+                 end
 
       if dest = out
-        count = extractor.write_corpus_jsonl(dest, kind: kind_sym, crystal_only: crystal_only)
-        io.puts "extracted #{count} #{kind} examples -> #{dest}"
+        extractor.write_corpus_jsonl(dest, examples, kind_sym)
+        io.puts "extracted #{examples.size} #{kind} examples#{verified ? " (compile-verified)" : ""} -> #{dest}"
       else
         examples.each do |ex|
           line = kind_sym == :pair ? {kind: "pair", prompt: ex.context, completion: ex.code} : {kind: "text", text: ex.to_text}
