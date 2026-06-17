@@ -43,4 +43,14 @@ describe Llamero::AgenticPlan do
     schema.should contain("tool_calls")
     schema.should contain("plan")
   end
+
+  it "serializes COMPACT (single line) even when file content has newlines" do
+    plan = Llamero::AgenticPlan.from_json(
+      %({"plan":"p","tool_calls":[{"tool":"write_file","path":"src/x.cr","content":"class X\\n  def y : Nil\\n  end\\nend"}]}))
+    compact = plan.to_json
+    compact.lines.size.should eq(1)             # one physical line — no pretty-printing
+    compact.should contain("\\n")               # the content newline stays escaped
+    # round-trips back to the same multi-line content
+    Llamero::AgenticPlan.from_json(compact).tool_calls[0].content.should contain("\n")
+  end
 end

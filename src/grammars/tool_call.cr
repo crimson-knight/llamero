@@ -35,9 +35,13 @@ module Llamero
   # plan) followed by the ORDERED tool calls to execute. Parsed like any
   # structured output via `chat_structured(messages, Llamero::AgenticPlan)`.
   #
+  # CONVENTION: emit COMPACT single-line JSON (what `.to_json` produces). Newlines
+  # in file `content` are escaped as `\n` inside the string — we do NOT train the
+  # model to pretty-print JSON; formatting for human eyes wastes tokens the parser
+  # never needs. One line, escaped content:
+  #
   # ```
-  # {"plan":"Process manager Billing::LockAccount; perform calls validate, lock, notify; file at src/billing/lock_account.cr.",
-  #  "tool_calls":[{"tool":"write_file","path":"src/billing/lock_account.cr","content":"..."}]}
+  # {"plan":"Process manager Billing::LockAccount; perform calls validate, lock, notify; file src/billing/lock_account.cr.","tool_calls":[{"tool":"write_file","path":"src/billing/lock_account.cr","content":"class Billing::LockAccount\n  def perform : Nil\n  end\nend"}]}
   # ```
   class AgenticPlan < BaseGrammar
     property plan : String = ""
