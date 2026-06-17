@@ -181,6 +181,53 @@ module Llamero::Native
     private def strip_line_comments(code : String) : String
       code.split('\n').reject { |l| l.lstrip.starts_with?('#') }.join('\n')
     end
+
+    # ---- optional fabrication grounding (against real .cr source) ----
+    # Crystal keywords + very common stdlib methods we never treat as "framework
+    # symbols" (so they're not flagged as fabricated).
+    STOPWORDS = Set{
+      "def", "end", "class", "module", "struct", "if", "unless", "else", "elsif", "while",
+      "until", "case", "when", "do", "return", "next", "break", "yield", "begin", "rescue",
+      "ensure", "raise", "require", "include", "extend", "property", "getter", "setter",
+      "puts", "print", "p", "pp", "new", "initialize", "to_s", "to_json", "to_h", "to_a",
+      "each", "map", "select", "reject", "find", "size", "first", "last", "nil", "true",
+      "false", "self", "super", "loop", "times", "upto", "downto", "abort", "exit",
+    }
+
+    # Candidate framework-DSL symbols a completion uses: snake_case identifiers
+    # called at statement position (macro/DSL calls like `validates_length`,
+    # `before_action`, `column`, `broadcast_to`) — the things that get fabricated.
+    # Constant paths are intentionally skipped (they're assembled from nested
+    # modules and never appear literally in source, so they can't be word-grepped).
+    def candidate_symbols(code : String) : Array(String)
+      syms = Set(String).new
+      strip_line_comments(code).split('\n').each do |line|
+        if md = line.lstrip.match(/^([a-z_][a-z0-9_]+[?!]?)\b/)
+          s = md[1]
+          syms << s unless STOPWORDS.includes?(s) || s.size < 4
+        end
+      end
+      syms.to_a
+    end
+
+    # A grounding proc (symbol -> exists in real source) over `.cr` source dirs —
+    # the same word-boundary gate used to curate the corpus. A statement-leading
+    # macro the model uses that never appears in the real source is a fabrication.
+    def source_grounding(roots : Array(String)) : Proc(String, Bool)
+      cache = {} of String => Bool
+      ->(sym : String) : Bool do
+        s = sym.strip
+        return true if s.empty?
+        if cache.has_key?(s)
+          cache[s]
+        else
+          ok = Process.run("grep", ["-rwqF", "--include=*.cr", "--", s] + roots,
+            output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+          cache[s] = ok
+          ok
+        end
+      end
+    end
   end
 
   # The honesty-aware tiered reward. Foreign-language and made-up syntax are
