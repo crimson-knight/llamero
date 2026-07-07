@@ -17,6 +17,15 @@ targets:
   crystal-training:
     main: src/tools/crystal_training.cr
 
+scripts:
+  # Opportunistically builds the PINNED llama.cpp (grammar-constrained
+  # structured output) into ~/.llamero/llamacpp/<tag>/. Never fails the
+  # install; skipped entirely by `shards install --skip-postinstall` or
+  # LLAMERO_SKIP_LLAMACPP=1, in which case the runtime probe fails closed
+  # with the manual command. See README "Grammar-constrained structured
+  # output".
+  postinstall: sh scripts/install_llamacpp.sh --postinstall
+
 dependencies:
   crinja:
     github: straight-shoota/crinja
