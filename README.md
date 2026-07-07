@@ -215,6 +215,87 @@ person = response.parsed.not_nil!
 puts "Name: #{person.name}, Age: #{person.age}"
 ```
 
+### Grammar-constrained structured output (local llama.cpp)
+
+`chat_structured` accepts a `generation_mode` (default `:auto`) that controls
+*how* the model is held to your schema:
+
+```crystal
+backend = Llamero::LlamaCpp::CompletionBackend.new(model_path: "path/to/model.gguf")
+
+response = backend.chat_structured(
+  [Llamero::Message.user("File a ticket for the crashing login page")],
+  Ticket,
+  generation_mode: :grammar   # :grammar | :schema_prompt | :auto
+)
+response.parsed              # => Ticket (output was JSON from the first byte)
+response.constraint_backend  # => "grammar"
+```
+
+In `:grammar` mode a GBNF grammar is derived from your `BaseGrammar` subclass
+**at compile time** (same type reflection as the JSON Schema builder, so the
+two can never disagree) and enforced during decoding - the model physically
+cannot emit anything that will not parse as your type. Keys are emitted in
+declaration order; that ordering is part of the grammar-mode contract.
+
+Honest per-backend matrix - no backend pretends to constrain when it cannot:
+
+| Backend | `:auto` | forced `:grammar` |
+|---|---|---|
+| `Llamero::LlamaCpp::CompletionBackend` (pinned llama.cpp) | GBNF when the type is within budget and the pinned build is installed; otherwise schema-prompt with an explicit `fallback_reason` + one-time warning | GBNF, or raises (`LlamaCppUnavailableError` / `GrammarBudgetExceededError`) |
+| OpenAI / Groq / OpenRouter | native `response_format` json_schema strict (unchanged) | raises `UnsupportedGenerationModeError` |
+| Anthropic | native structured output (unchanged) | raises |
+| CLI-subprocess clients (Claude Code, ...) | unsupported, unchanged | raises |
+| Native MLX (`ModelSession`) | schema-prompt (the Swift bridge drops the `schema` field and pinned mlx-swift-lm has no logit masking - grammar there would need a custom logit processor) | raises |
+
+There is never a silent downgrade: forcing `:grammar` on a backend that
+cannot constrain decoding raises, and `:auto` fallbacks always carry a reason.
+
+**The complexity cliff.** Grammar-from-types genuinely falls over for deeply
+complex types (llama.cpp hard-breaks past `MAX_REPETITION_THRESHOLD = 2000`,
+and schema->grammar coverage drops steeply with schema complexity in
+JSONSchemaBench). llamero refuses instead of lying, at compile time where
+possible. The budget (initial numbers, revisited as we benchmark): max 128
+rules, nesting depth 8, 6 optional fields per object (optionals become an
+explicit 2^n subset alternation, never the pathological `x? x? x?` chains),
+256 total alternatives, 4 union members (nilable/numeric-widening only), 4
+levels of array/hash nesting, and **no recursive types** (v1 refuses bounded
+recursion outright). Over-budget behavior:
+
+- `T.to_gbnf` - compile error with the reason.
+- `generation_mode: :grammar` - raises `GrammarBudgetExceededError` at runtime.
+- `generation_mode: :auto` - falls back to schema-prompt + typed parse;
+  `T.gbnf_fallback_reason` tells you why, and the first call logs a warning.
+
+**The llama.cpp pin.** llama.cpp releases near-daily with breaking flag/API
+changes, so llamero supports exactly ONE build:
+`b9902` (commit `55edb2de442b50be0a29c2ed2ec88488560a96c5`), declared in
+`src/llamacpp/support.cr` and built by `scripts/install_llamacpp.sh` into
+`~/.llamero/llamacpp/b9902/bin/llama-completion` (or `$LLAMERO_HOME/...`).
+`shards install` runs the installer opportunistically via postinstall; since
+`--skip-postinstall` exists, a mandatory runtime probe fails closed - it
+verifies the pinned path, the exact commit via `--version`, and the flag
+surface, and it NEVER accepts a llama.cpp found on PATH (a working brew
+install on the dev machine is exactly the false positive this kills). If the
+probe fails you get the fix command in the error:
+
+```sh
+sh scripts/install_llamacpp.sh   # from lib/llamero/ when installed as a dependency
+```
+
+Pin upgrades are deliberate PRs, never automatic: bump the constants, clean
+rebuild, flag-surface smoke, `.gbnf` + `--json-schema` enforcement smoke,
+generated-grammar fixture suite against the new binary, benchmark smoke, and
+a changelog of changed llama.cpp surfaces - and a pin bump is at least a
+minor llamero release.
+
+Performance note: we publish only numbers we have measured ourselves with the
+4-arm protocol in the repo (base/tuned x unconstrained/grammar, matched
+prompts, time-to-correct with retries on the failing arm's clock). Until
+those runs land in this README, no speed claims here - what grammar mode
+already guarantees is structural: output parses as your type or the call
+raises with everything you need to debug.
+
 ### Streaming
 
 ```crystal

@@ -9,7 +9,14 @@ independent tracks that share the same `Message` and `BaseGrammar` types:
 2. **Native local inference** (`Llamero::Native`): runs MLX models locally on
    Apple Silicon through a Swift bridge — resident model, token streaming,
    structured output, LoRA/QLoRA adapter hot-swap, and **in-process adapter
-   training**. No Python, no llama.cpp.
+   training**. No Python.
+3. **Pinned llama.cpp track** (`Llamero::LlamaCpp`): grammar-constrained
+   structured output (GBNF derived from Crystal types at compile time) through
+   a subprocess seam to EXACTLY ONE supported llama.cpp build, installed by
+   `scripts/install_llamacpp.sh` and enforced by a fail-closed runtime probe
+   that never accepts a PATH llama.cpp. Additive and optional — cloud-only or
+   MLX-only users never need it. ("No llama.cpp" was v2 law until this track;
+   the revisit is owner-sanctioned and confined to `src/llamacpp/`.)
 
 ## Which API do I need?
 
@@ -20,6 +27,7 @@ independent tracks that share the same `Message` and `BaseGrammar` types:
 | Typed JSON output from any model | `chat_structured` + a `Llamero::BaseGrammar` subclass | both skills |
 | Teach a local model new facts/documents; LoRA/QLoRA | `session.train_adapter` | `adapter-training` |
 | Toggle learned knowledge on/off at runtime | `session.activate_adapters` / `deactivate_adapters` | `local-inference` |
+| Decode-time schema enforcement (output physically cannot fail to parse) | `Llamero::LlamaCpp::CompletionBackend#chat_structured` with `generation_mode: :grammar` | README "Grammar-constrained structured output" |
 
 Minimal rules that prevent most mistakes:
 
@@ -67,6 +75,16 @@ Layout:
   structured / training), `adapters.cr`, `training.cr`, `model_downloader.cr`,
   `mlx_bridge.cr` (dlopen FFI), `mock_bridge.cr`, `events.cr`, `errors.cr`.
 - `native/llamero-mlx/` — Swift package exposing the C ABI over mlx-swift-lm.
+- `src/llamacpp/` — pinned llama.cpp track: `support.cr` (THE pin + probe),
+  `runner.cr` (subprocess seam + MockRunner), `completion_backend.cr`.
+  `src/grammars/gbnf_builder.cr` derives GBNF from types at macro time;
+  over-budget types are refused (compile-time via `T.to_gbnf`, runtime via
+  forced `:grammar`) — see the README for the complexity budget.
+- `scripts/install_llamacpp.sh` — builds the pinned llama.cpp tag into
+  `~/.llamero/llamacpp/<tag>/`; run by shard.yml postinstall, safe to re-run.
+  Pin bumps are deliberate PRs (bump constants in `src/llamacpp/support.cr`,
+  rebuild, re-run enforcement smokes + fixture suite, changelog) and at least
+  a minor version bump.
 - `spec/native/` — runs against MockBridge, no model downloads needed.
 - `training_data/` — golden Q&A dataset about llamero's own API, used to
   train the dogfood docs adapter (`examples/train_llamero_docs_adapter.cr`).
@@ -78,6 +96,9 @@ Repo conventions and gotchas:
 
 - Specs must pass without the Swift bridge and without network access —
   anything touching real inference belongs in `examples/`, not `spec/`.
+  The llama.cpp track follows the same law via `MockRunner`; the one live
+  grammar spec self-skips unless the pinned build is installed and
+  `LLAMERO_SPEC_GGUF` points at a model.
 - The C ABI is the compatibility boundary: changing
   `native/llamero-mlx/Sources/LlameroMLXBridge/Bridge.swift` exports requires
   matching `src/native/mlx_bridge.cr` and a rebuild via `build.sh`.
