@@ -233,10 +233,16 @@ response.constraint_backend  # => "grammar"
 ```
 
 In `:grammar` mode a GBNF grammar is derived from your `BaseGrammar` subclass
-**at compile time** (same type reflection as the JSON Schema builder, so the
-two can never disagree) and enforced during decoding - the model physically
-cannot emit anything that will not parse as your type. Keys are emitted in
-declaration order; that ordering is part of the grammar-mode contract.
+**at compile time** (the same `instance_vars` walk the JSON Schema builder
+uses, so wherever both support a type they describe the same shape - GBNF
+additionally *refuses* some types the JSON Schema builder tolerates; that
+refusal surface is the budget below) and enforced during decoding: every
+generated token is constrained to the grammar. The one residual failure mode
+is truncation - if `max_tokens` cuts generation mid-object the output is
+grammar-prefix-valid but incomplete, which surfaces as a typed parse error
+plus one retry on the grammar clock, never as silent bad data. Keys are
+emitted in declaration order; that ordering is part of the grammar-mode
+contract.
 
 Honest per-backend matrix - no backend pretends to constrain when it cannot:
 
@@ -254,8 +260,9 @@ cannot constrain decoding raises, and `:auto` fallbacks always carry a reason.
 **The complexity cliff.** Grammar-from-types genuinely falls over for deeply
 complex types (llama.cpp hard-breaks past `MAX_REPETITION_THRESHOLD = 2000`,
 and schema->grammar coverage drops steeply with schema complexity in
-JSONSchemaBench). llamero refuses instead of lying, at compile time where
-possible. The budget (initial numbers, revisited as we benchmark): max 128
+JSONSchemaBench - both external findings; we have not measured past-budget
+decoding ourselves, because the budget exists precisely to refuse it).
+llamero refuses instead of lying, at compile time where possible. The budget (initial numbers, revisited as we benchmark): max 128
 rules, nesting depth 8, 6 optional fields per object (optionals become an
 explicit 2^n subset alternation, never the pathological `x? x? x?` chains),
 256 total alternatives, 4 union members (nilable/numeric-widening only), 4
