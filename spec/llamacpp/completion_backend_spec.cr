@@ -185,5 +185,19 @@ describe Llamero::LlamaCpp::CompletionBackend do
       prompt.should contain("User: Hi")
       prompt.should end_with("Assistant:")
     end
+
+    it "scrubs invalid UTF-8 from subprocess output instead of raising from PCRE2" do
+      runner = runner_with_healthy_probe
+      # "hi " + invalid 3-byte sequence (0xE2 not followed by continuation bytes) + " ok"
+      invalid_utf8 = String.new(Bytes[0x68, 0x69, 0x20, 0xE2, 0x28, 0xA1, 0x20, 0x6F, 0x6B])
+      invalid_utf8.valid_encoding?.should be_false # guard: fixture really is invalid
+      runner.enqueue(invalid_utf8 + " [end of text]")
+      backend = backend_with(runner)
+
+      response = backend.chat([Llamero::Message.user("Hi")])
+      response.content.valid_encoding?.should be_true
+      response.content.should start_with("hi ")
+      response.content.should end_with(" ok")
+    end
   end
 end

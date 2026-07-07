@@ -284,8 +284,15 @@ module Llamero
 
       # llama-completion appends " [end of text]" to stdout when generation
       # hits EOS (verified against the pinned build).
+      #
+      # `scrub` first: subprocess stdout is raw bytes, and an unconstrained
+      # model can emit invalid UTF-8 (e.g. a multi-byte codepoint truncated at
+      # the max_tokens boundary). PCRE2 raises ArgumentError on invalid UTF-8,
+      # which would crash the caller instead of returning content that simply
+      # fails the typed parse (observed live: SmolLM-135M rambling at temp 0.8
+      # killed a benchmark run mid-flight).
       private def strip_end_marker(output : String) : String
-        output.gsub(/\s*\[end of text\]\s*\z/, "").strip
+        output.scrub.gsub(/\s*\[end of text\]\s*\z/, "").strip
       end
 
       # v1 prompt rendering is a plain role-labelled transcript (no model chat
