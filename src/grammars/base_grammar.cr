@@ -1,5 +1,6 @@
 require "json"
 require "../schemas/json_schema_builder"
+require "./gbnf_builder"
 
 # Base class for structured responses from AI providers.
 #
@@ -47,5 +48,33 @@ class Llamero::BaseGrammar
   # Returns the JSON Schema as a JSON string
   def self.to_json_schema_string : String
     to_json_schema.to_json
+  end
+
+  # The GBNF grammar derived from this type at compile time, for
+  # grammar-constrained decoding against the pinned llama.cpp build.
+  #
+  # REFUSES over-budget or unsupported types AT COMPILE TIME (recursion, > 6
+  # optional fields per object, unsupported unions, depth > 8, ...) - see
+  # GbnfBuilder for the full budget. For a non-raising variant use `to_gbnf?`.
+  def self.to_gbnf : String
+    GbnfBuilder(self).new.build
+  end
+
+  # The GBNF grammar, or nil when this type is over the complexity budget or
+  # not grammar-representable. Never a compile error - this is the `:auto`
+  # fallback probe. The reason is available from `gbnf_fallback_reason`.
+  def self.to_gbnf? : String?
+    GbnfBuilder(self).new.build?
+  end
+
+  # Whether this type's GBNF fits the complexity budget (D7 cliff policy).
+  def self.gbnf_within_budget? : Bool
+    GbnfBuilder(self).new.within_budget?
+  end
+
+  # Why grammar mode would fall back to schema-prompt for this type, or nil
+  # when grammar mode is available.
+  def self.gbnf_fallback_reason : String?
+    GbnfBuilder(self).new.fallback_reason
   end
 end
