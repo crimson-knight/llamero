@@ -296,12 +296,23 @@ generated-grammar fixture suite against the new binary, benchmark smoke, and
 a changelog of changed llama.cpp surfaces - and a pin bump is at least a
 minor llamero release.
 
-Performance note: we publish only numbers we have measured ourselves with the
-4-arm protocol in the repo (base/tuned x unconstrained/grammar, matched
-prompts, time-to-correct with retries on the failing arm's clock). Until
-those runs land in this README, no speed claims here - what grammar mode
-already guarantees is structural: output parses as your type or the call
-raises with everything you need to debug.
+Performance note: we publish only numbers we have measured ourselves. The
+4-arm run (base/tuned x unconstrained/grammar, matched prompts, N=25/cell,
+time-to-pass with retries on the failing arm's clock) is written up with raw
+per-attempt data in [`benchmarks/gbnf/BENCH_RESULTS.md`](benchmarks/gbnf/BENCH_RESULTS.md).
+Headlines, honestly scoped (SmolLM-135M, CPU, calibrated partial oracle - read
+the write-up's Vocabulary and Threats sections before quoting): on the base
+model, grammar cut median wall-to-pass 78% on a flat schema *versus an
+unconstrained baseline with no stop heuristic at max_tokens 400* (most of that
+gap is the unconstrained model rambling to the token limit); on a nested
+schema unconstrained output parsed but never once contained the required
+`email` key (0/106 parseable emissions) while grammar passed 25/25; on the
+budget-boundary type (24 KB grammar) sampler cost showed no measurable
+per-token growth. On a model fine-tuned to stop cleanly, grammar added ~0%
+speed on the flat task - the win there is structural, not speed. What grammar
+mode guarantees is structure: output parses as your type or the call raises
+with everything you need to debug - it does NOT guarantee the values are
+right.
 
 ### Streaming
 

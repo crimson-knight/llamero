@@ -1,0 +1,8 @@
+Showing last frame. Use --error-trace for full trace.
+
+In src/_forced_overbudget_tmp.cr:4:19
+
+ 4 | puts CliffBreaker.to_gbnf
+                       ^------
+Error: GBNF for CliffBreaker exceeds budget: CliffBreaker has 7 optional fields (max 6; 2^n subset alternation); use generation_mode :auto or :schema_prompt
+compile exit status: 1 (non-zero = refused at compile time, as designed)

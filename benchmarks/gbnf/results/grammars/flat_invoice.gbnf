@@ -1,0 +1,8 @@
+root ::= flat-invoice
+ws ::= [ \t\n\r]{0,20}
+string ::= "\"" char* "\""
+char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" hex hex hex hex)
+hex ::= [0-9a-fA-F]
+float ::= "-"? ("0" | [1-9][0-9]*) ("." [0-9]+)? ([eE] [+-]? [0-9]+)?
+bool ::= "true" | "false"
+flat-invoice ::= "{" ws "\"invoice_number\"" ws ":" ws string ws "," ws "\"customer_name\"" ws ":" ws string ws "," ws "\"total_amount\"" ws ":" ws float ws "," ws "\"currency\"" ws ":" ws string ws "," ws "\"paid\"" ws ":" ws bool ws "}"

@@ -1,0 +1,15 @@
+name: gbnf_bench
+version: 0.1.0
+
+description: |
+  4-arm GBNF benchmark harness for the llamero gbnf-structured-generation
+  branch. Arms: {base, tuned} x {unconstrained, grammar}, matched prompts,
+  time-to-CORRECT protocol per GBNF_SPEC.md section 4.
+
+dependencies:
+  llamero:
+    path: ../..
+
+targets:
+  bench:
+    main: src/bench.cr

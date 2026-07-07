@@ -1,0 +1,9 @@
+root ::= contact-card
+ws ::= [ \t\n\r]{0,20}
+string ::= "\"" char* "\""
+char ::= [^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" hex hex hex hex)
+hex ::= [0-9a-fA-F]
+int ::= "-"? ("0" | [1-9][0-9]*)
+contact-card ::= "{" ws "\"name\"" ws ":" ws string ws "," ws "\"age\"" ws ":" ws int ws "," ws "\"email\"" ws ":" ws string ws "," ws "\"address\"" ws ":" ws contact-address ws "," ws "\"tags\"" ws ":" ws string-arr ws "}"
+contact-address ::= "{" ws "\"street\"" ws ":" ws string ws "," ws "\"city\"" ws ":" ws string ws "," ws "\"country\"" ws ":" ws string ws "}"
+string-arr ::= "[" ws (string (ws "," ws string)*)? ws "]"
