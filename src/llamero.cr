@@ -5,6 +5,7 @@ require "./config/**"
 require "./clients/**"
 require "./clients/cli/**"
 require "./native/**"
+require "./llamacpp/**"
 
 # Llamero - A Crystal library for interacting with AI/LLM providers
 #

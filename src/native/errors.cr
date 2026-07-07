@@ -102,11 +102,37 @@ module Llamero::Native
     getter schema_name : String
     getter adapter_stack : AdapterStack?
 
+    # Which generation_mode produced the failing output ("grammar",
+    # "schema_prompt", "auto"), when known.
+    getter generation_mode : String?
+
+    # The backend that ran the generation (e.g. "llama_cpp_completion",
+    # "native_mlx").
+    getter backend_name : String?
+
+    # How the output was constrained: "grammar" | "native_schema" | "schema_prompt".
+    getter constraint_backend : String?
+
+    # Short SHA-256 fragment of the GBNF grammar used (grammar mode only).
+    getter grammar_hash : String?
+
+    # The pinned llama.cpp tag in play (llama.cpp backend only).
+    getter llama_cpp_tag : String?
+
+    # Why :auto fell back from grammar to schema-prompt, when it did.
+    getter fallback_reason : String?
+
     def initialize(
       message : String,
       @raw_text : String,
       @schema_name : String,
-      @adapter_stack : AdapterStack? = nil
+      @adapter_stack : AdapterStack? = nil,
+      @generation_mode : String? = nil,
+      @backend_name : String? = nil,
+      @constraint_backend : String? = nil,
+      @grammar_hash : String? = nil,
+      @llama_cpp_tag : String? = nil,
+      @fallback_reason : String? = nil
     )
       super(message, "structured_parse_failed", recoverable: true, base_model_loaded: true)
     end

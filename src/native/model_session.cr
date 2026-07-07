@@ -429,6 +429,14 @@ module Llamero::Native
     # the bridge request so grammar-constrained decoding can use it once the
     # native bridge supports logit masking.
     #
+    # The MLX bridge cannot constrain decoding today: the Swift side drops the
+    # `schema` field from GenerateRequest and pinned mlx-swift-lm has no logit
+    # masking, so this backend is honestly schema-prompt-only. `:auto` and
+    # `:schema_prompt` both run the schema-prompt flow; forcing
+    # `generation_mode: :grammar` raises UnsupportedGenerationModeError (never
+    # a silent downgrade). Grammar mode lives on the pinned llama.cpp backend
+    # (Llamero::LlamaCpp::CompletionBackend).
+    #
     # Parse failures raise StructuredParseError carrying the raw text, the
     # schema name, and the active adapter stack. Retries can run without
     # reloading the base model.
@@ -437,7 +445,16 @@ module Llamero::Native
       response_schema : T.class,
       temperature : Float32? = nil,
       max_tokens : Int32? = nil,
+      generation_mode : GenerationMode = Llamero.config.structured_generation_mode,
     ) : NativeChatResponse(T) forall T
+      if generation_mode.grammar?
+        raise UnsupportedGenerationModeError.new(
+          "native_mlx",
+          "the MLX Swift bridge drops the schema field and has no logit processor; " \
+          "use the pinned llama.cpp backend (Llamero::LlamaCpp::CompletionBackend) for grammar mode"
+        )
+      end
+
       ensure_loaded
       schema_json = T.to_json_schema_string
       prompted = inject_schema_instruction(messages, schema_json)
@@ -453,7 +470,10 @@ module Llamero::Native
           "Failed to parse model output into #{T.name}: #{ex.message}",
           raw_text: content,
           schema_name: T.name,
-          adapter_stack: @active_adapter_stack
+          adapter_stack: @active_adapter_stack,
+          generation_mode: generation_mode.to_s.underscore,
+          backend_name: "native_mlx",
+          constraint_backend: "schema_prompt"
         )
       end
 

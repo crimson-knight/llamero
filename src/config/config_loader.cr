@@ -1,5 +1,6 @@
 require "yaml"
 require "./storage"
+require "../grammars/generation_mode"
 
 module Llamero
   # Configuration loader that reads from a project-relative config file with ENV variable fallback
@@ -29,6 +30,11 @@ module Llamero
     getter default_temperature : Float32
     getter default_max_tokens : Int32
 
+    # Global default for chat_structured's generation_mode (:auto unless
+    # overridden by LLAMERO_GENERATION_MODE or `defaults: generation_mode:`
+    # in the config file).
+    getter structured_generation_mode : GenerationMode
+
     def initialize(
       openai_api_key : String? = nil,
       openai_organization : String? = nil,
@@ -39,6 +45,7 @@ module Llamero
       default_model : String? = nil,
       default_temperature : Float32? = nil,
       default_max_tokens : Int32? = nil,
+      structured_generation_mode : GenerationMode? = nil,
     )
       # Load config file if it exists
       config = load_config_file
@@ -55,6 +62,10 @@ module Llamero
       @default_model = default_model || config.dig?("defaults", "model").try(&.as_s) || "gpt-4o"
       @default_temperature = default_temperature || config.dig?("defaults", "temperature").try(&.as_f.to_f32) || 0.7_f32
       @default_max_tokens = default_max_tokens || config.dig?("defaults", "max_tokens").try(&.as_i) || 4096
+      @structured_generation_mode = structured_generation_mode ||
+                                    ENV["LLAMERO_GENERATION_MODE"]?.try { |raw| GenerationMode.parse?(raw) } ||
+                                    config.dig?("defaults", "generation_mode").try { |raw| GenerationMode.parse?(raw.as_s) } ||
+                                    GenerationMode::Auto
     end
 
     # Get API key for a specific provider

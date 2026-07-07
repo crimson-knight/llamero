@@ -7,11 +7,12 @@ require "./api_errors"
 module Llamero
   # Enumeration of features that API providers may or may not support
   enum Feature
-    StructuredOutput  # JSON Schema-based structured responses
-    ToolCalling       # Function/tool calling capability
-    Streaming         # Server-sent events streaming
-    Embeddings        # Text embedding generation
-    Vision            # Image understanding
+    StructuredOutput         # Some honest structured path exists (native schema mode or schema-prompt)
+    ToolCalling              # Function/tool calling capability
+    Streaming                # Server-sent events streaming
+    Embeddings               # Text embedding generation
+    Vision                   # Image understanding
+    GrammarConstrainedOutput # Decode-time GBNF constraint (pinned llama.cpp backend only)
   end
 
   # Role of a message in a conversation
@@ -195,6 +196,18 @@ module Llamero
 
     # Check if provider supports a specific feature
     abstract def supports?(feature : Feature) : Bool
+
+    # Cloud/CLI providers constrain output through their native schema modes;
+    # they cannot run decode-time GBNF. Forcing generation_mode: :grammar
+    # raises instead of silently downgrading. `:auto` and `:schema_prompt`
+    # keep using the provider's native structured mode exactly as before.
+    protected def reject_grammar_mode(generation_mode : GenerationMode) : Nil
+      return unless generation_mode.grammar?
+      raise UnsupportedGenerationModeError.new(
+        provider_name,
+        "cloud providers use their native structured-output modes; decode-time GBNF requires the local pinned llama.cpp backend (Llamero::LlamaCpp::CompletionBackend)"
+      )
+    end
 
     # Helper method to make HTTP requests
     protected def make_request(

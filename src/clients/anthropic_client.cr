@@ -76,8 +76,11 @@ module Llamero
       response_schema : T.class,
       model : String? = nil,
       temperature : Float32? = nil,
-      max_tokens : Int32? = nil
+      max_tokens : Int32? = nil,
+      generation_mode : GenerationMode = Llamero.config.structured_generation_mode
     ) : ChatResponse(T) forall T
+      reject_grammar_mode(generation_mode)
+
       # Build the JSON schema from the grammar class
       schema = T.to_json_schema
 

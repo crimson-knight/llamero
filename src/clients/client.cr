@@ -139,10 +139,11 @@ module Llamero
       response_schema : T.class,
       model : String? = nil,
       temperature : Float32? = nil,
-      max_tokens : Int32? = nil
+      max_tokens : Int32? = nil,
+      generation_mode : GenerationMode = Llamero.config.structured_generation_mode
     ) : ChatResponse(T) forall T
       execute_with_failover([Feature::StructuredOutput]) do |client, provider, mapped_model|
-        client.chat_structured(messages, T, mapped_model || model, temperature, max_tokens)
+        client.chat_structured(messages, T, mapped_model || model, temperature, max_tokens, generation_mode)
       end
     end
 

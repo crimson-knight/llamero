@@ -176,9 +176,10 @@ module Llamero::Native
       messages : Array(Message),
       response_schema : T.class,
       temperature : Float32? = nil,
-      max_tokens : Int32? = nil
+      max_tokens : Int32? = nil,
+      generation_mode : GenerationMode = Llamero.config.structured_generation_mode
     ) : NativeChatResponse(T) forall T
-      self[name].chat_structured(messages, response_schema, temperature, max_tokens)
+      self[name].chat_structured(messages, response_schema, temperature, max_tokens, generation_mode)
     end
 
     # Total resident memory across loaded members, from their load metrics.

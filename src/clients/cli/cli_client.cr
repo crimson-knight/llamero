@@ -121,7 +121,8 @@ module Llamero
       response_schema : T.class,
       model : String? = nil,
       temperature : Float32? = nil,
-      max_tokens : Int32? = nil
+      max_tokens : Int32? = nil,
+      generation_mode : GenerationMode = Llamero.config.structured_generation_mode
     ) : ChatResponse(T) forall T
       raise APIError.new(
         "#{provider_name} does not support structured output yet",
