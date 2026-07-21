@@ -21,7 +21,9 @@
 require "../src/llamero"
 
 SPECIALIST_MODEL = "mlx-community/gemma-3-1b-it-4bit"
-CHAT_MODEL       = "mlx-community/gemma-4-e2b-it-4bit"
+# Revision-pinned: the upstream repo was re-uploaded 2026-07-06 with a tensor
+# layout the bundled MLX loader can't read yet (see README Troubleshooting).
+CHAT_MODEL = "mlx-community/gemma-4-e2b-it-4bit@2c3e507453b4f218d05fe3cc97bea5c5a654257e"
 
 bridge = Llamero::Native::MLXBridge.try_load
 unless bridge

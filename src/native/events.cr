@@ -220,9 +220,27 @@ module Llamero::Native
       @base_model_loaded = raw["base_model_loaded"]?.try(&.as_bool) || false
     end
 
+    # Raw MLX loader failures (tensor-shape dumps) are wrapped with what the
+    # user should actually do; everything else passes through untouched.
+    private def load_failure_message : String
+      case @message
+      when .includes?("unsupportedModelType")
+        "#{@message}\nThis architecture isn't supported by the bundled MLX runtime. " \
+        "If this is a plain (non-MLX) Hugging Face repo, try an mlx-community/* conversion instead."
+      when .includes?("mismatchedSize"), .includes?("keyNotFound")
+        "#{@message}\nThe checkpoint's layout doesn't match the bundled MLX loader - " \
+        "this usually means the model repo was re-converted/re-uploaded upstream. " \
+        "Fixes: update llamero and rebuild the bridge (native/llamero-mlx/build.sh), " \
+        "or pin a known-good revision: \"<model-id>@<revision>\". " \
+        "If a cached copy predates the re-upload, delete it under ~/.llamero/models/ first."
+      else
+        @message
+      end
+    end
+
     def to_error : NativeError
       case @code
-      when "model_load_failed"     then ModelLoadError.new(@message)
+      when "model_load_failed"     then ModelLoadError.new(load_failure_message)
       when "model_unavailable"     then ModelUnavailableError.new(@message)
       when "adapter_incompatible"  then AdapterIncompatibleError.new(@message, base_model_loaded: @base_model_loaded)
       when "adapter_activation_failed" then AdapterActivationError.new(@message, base_model_loaded: @base_model_loaded)

@@ -1,0 +1,51 @@
+name: Bug report
+description: Something broke — help us reproduce it
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. These fields are required so we can reproduce quickly —
+        a bare error paste on its own can't be acted on.
+  - type: textarea
+    id: doing
+    attributes:
+      label: What were you doing?
+      description: The exact command or code you ran, and what you were trying to accomplish.
+      placeholder: crystal run examples/native_smoke_test.cr -- mlx-community/gemma-4-e2b-it-4bit
+    validations:
+      required: true
+  - type: input
+    id: model_id
+    attributes:
+      label: Model id
+      description: The Hugging Face model id you were loading (if applicable).
+      placeholder: mlx-community/gemma-4-e2b-it-4bit
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Full error text / output.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - llamero version/commit:
+        - OS + version:
+        - Chip (Apple Silicon?):
+        - Crystal version:
+        - Native bridge built? (ran native/llamero-mlx/build.sh):
+    validations:
+      required: true

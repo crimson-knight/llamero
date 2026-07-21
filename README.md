@@ -59,6 +59,39 @@ cd native/llamero-mlx && ./build.sh
 crystal run examples/native_smoke_test.cr   # real on-device inference
 ```
 
+### Supported models & where they come from
+
+The native track loads MLX-compatible checkpoints straight from the Hugging
+Face Hub: any repo with a `config.json` and `.safetensors` weights whose
+architecture is supported by the bundled `mlx-swift-lm` loader. The
+[`mlx-community`](https://huggingface.co/mlx-community) conversions are the
+recommended source — they are pre-quantized, generally ungated, and tested
+against the loader. Plain (non-MLX-converted) safetensors repos of supported
+architectures also work — for example `HuggingFaceTB/SmolLM2-135M-Instruct`
+loads and runs fine. GGUF and `.bin`-only repos are **not** supported. Local
+inference requires an Apple Silicon Mac.
+
+Models download on first load to `~/.llamero/models/<org>--<name>` (override
+the root with `$LLAMERO_HOME`). A `.llamero-complete` marker file gates cache
+validity; to force a re-download, delete that model's folder.
+
+A model id may also pin a revision — `org/name@revision`, where the revision
+is any git sha, tag, or branch on the Hub. Pinned revisions cache separately:
+
+```crystal
+runtime = Llamero::Native::MLXRuntime.new(
+  model_id: "mlx-community/gemma-4-e2b-it-4bit@2c3e507453b4f218d05fe3cc97bea5c5a654257e"
+)
+```
+
+Why this exists: Hub repos are sometimes re-converted and re-uploaded in
+place, and a new upload can use a checkpoint layout newer than the bundled
+loader understands. Pinning a known-good revision keeps you working while
+the loader catches up. The example above is real:
+`mlx-community/gemma-4-e2b-it-4bit` was re-uploaded on 2026-07-06 with a
+tensor layout the current loader can't read yet, so the examples pin the
+last-good revision.
+
 ### Audio (experimental)
 
 The native track also ships an on-device speech runtime: speech-to-text with
@@ -393,6 +426,29 @@ crystal spec
 # Type check
 crystal build src/llamero.cr --no-codegen
 ```
+
+## Troubleshooting
+
+Common failures when loading or running local models, and what to do about
+them:
+
+| Symptom | What it means | What to do |
+|---------|---------------|------------|
+| HTTP 404 while listing model files | The model id is typo'd or the repo doesn't exist | Check the spelling; browse <https://huggingface.co/mlx-community> for the exact id |
+| HTTP 401/403 during download | The repo is gated and needs authentication | Set `HF_TOKEN` (or `HUGGING_FACE_HUB_TOKEN`) to a Hugging Face token with access, or use an ungated `mlx-community` conversion |
+| "has no .safetensors weights on the Hugging Face Hub" | The repo is GGUF-only, `.bin`-only, or has no weights at all | Use an `mlx-community` conversion of the model, or convert it yourself with `mlx_lm.convert` |
+| "Model load failed ... mismatchedSize/keyNotFound ... checkpoint's layout doesn't match the bundled MLX loader" | Version skew between the checkpoint and the loader — often an upstream re-upload of the repo | Update llamero and rebuild the bridge (`native/llamero-mlx/build.sh`), or pin a known-good revision with `model@revision` (see "Supported models" above) |
+| stderr warning: "llamero: MLX bridge not found — using MOCK inference" | The native bridge isn't built, so you're getting canned fake output | Run `native/llamero-mlx/build.sh` |
+| `StructuredParseError` (model emitted prose instead of JSON) | A model-capability issue, not a load problem | Use a larger / better instruction-following model, or loosen the schema; retries are cheap since the model stays loaded |
+
+Note: Gemma-3 multimodal 4B/12B/27B conversions ship with an incomplete
+`text_config`; llamero auto-patches this at download time (restoring
+`num_attention_heads`, `num_key_value_heads`, and `head_dim`), so these repos
+load without manual fixes.
+
+Hardware: local inference requires an Apple Silicon Mac running a recent
+macOS. As a rough guide, budget the checkpoint size plus 1-2GB of overhead in
+RAM — a 3.4GB 4-bit model peaked around 2.5GB of GPU memory in our tests.
 
 ## Contributing
 

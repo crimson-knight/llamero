@@ -1,0 +1,22 @@
+name: Triage low-info issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check issue for enough information
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MIN_PROSE_WORDS: "12"
+          # Pilot mode: labels + comments but never closes. Flip to "false"
+          # after a week of watching it label correctly.
+          DRY_RUN: "true"
+        run: ruby .github/scripts/triage_low_info.rb

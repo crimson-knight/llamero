@@ -21,7 +21,13 @@ module Llamero::Native
     #
     # The dylib search order is documented on MLXBridge.discover_library_path.
     def self.auto : Bridge
-      MLXBridge.try_load || MockBridge.new
+      if bridge = MLXBridge.try_load
+        bridge
+      else
+        STDERR.puts "llamero: MLX bridge not found - using MOCK inference (output is canned, " \
+                    "no model is loaded). Build the real bridge with native/llamero-mlx/build.sh"
+        MockBridge.new
+      end
     end
 
     # Human-readable backend name (e.g. "mlx", "mock").
