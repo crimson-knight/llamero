@@ -6,10 +6,12 @@ name: Fresh install CI (macOS)
 #   1. an MLX-converted 4-bit checkpoint,
 #   2. a plain (non-MLX) safetensors repo, and
 #   3. a GGUF-only repo that MUST fail with our actionable error.
-# Manual only - it builds the bridge and downloads models, so it is a
-# verification/release gate, not a per-push hook.
+# Runs on manual dispatch and as the second gate of the release process
+# (called by release.yml, after the probe). It builds the bridge and downloads
+# models, so it is a verification/release gate, not a per-push hook.
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   fresh-install:

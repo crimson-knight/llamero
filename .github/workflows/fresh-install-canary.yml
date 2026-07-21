@@ -19,6 +19,17 @@ on:
         description: "Skip all real work and force the failure path (cheaply tests the auto-issue wiring)"
         type: boolean
         default: false
+  workflow_call:
+    inputs:
+      pinned_only:
+        description: "Run only the pinned job (release gate); skip the upstream-head drift detector"
+        type: boolean
+        default: false
+        required: false
+      simulate_failure:
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
@@ -105,7 +116,9 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 150
     continue-on-error: true
-    if: ${{ !inputs.simulate_failure }}
+    # Skipped for simulated failures and for release-gate calls (pinned_only) -
+    # both inputs are unset (falsy) on the weekly schedule, so it runs there.
+    if: ${{ !inputs.simulate_failure && !inputs.pinned_only }}
     steps:
       - uses: actions/checkout@v4
 

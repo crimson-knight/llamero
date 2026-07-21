@@ -1,0 +1,66 @@
+name: Release validation
+
+# The release process. Every version tag must prove, on fresh hosted Apple
+# hardware, that:
+#   1. the runner environment is sane (mlx-probe - Metal present, fails in
+#      under a minute if the image regressed),
+#   2. the README install path works for every supported model format
+#      (fresh-install-ci: MLX 4-bit, plain safetensors, GGUF-negative), and
+#   3. a truly cold machine can download and run the pinned model
+#      (fresh-install-canary, pinned leg only - the drift detector is the
+#      weekly schedule's job, not a release gate).
+# All green on a tag push -> the GitHub Release is created automatically with
+# generated notes plus a validation link.
+#
+# workflow_dispatch runs the same chain as a DRY RUN: full validation, no
+# release created.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  probe:
+    uses: ./.github/workflows/mlx-probe.yml
+
+  fresh-install:
+    needs: probe
+    uses: ./.github/workflows/fresh-install-ci.yml
+
+  cold-canary:
+    needs: fresh-install
+    uses: ./.github/workflows/fresh-install-canary.yml
+    with:
+      pinned_only: true
+
+  publish-release:
+    needs: [probe, fresh-install, cold-canary]
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create the GitHub Release (tag pushes only)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "Dry run (workflow_dispatch): validation chain passed; no release created."
+            gh auth status
+            exit 0
+          fi
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - leaving it untouched."
+            exit 0
+          fi
+          gh release create "$TAG" --title "$TAG" --generate-notes \
+            --notes "Validated on a fresh GitHub-hosted Apple Silicon runner: environment probe, full README install path (MLX + plain-safetensors + GGUF-negative), and a cold-machine pinned-model download and run. Validation run: $RUN_URL"

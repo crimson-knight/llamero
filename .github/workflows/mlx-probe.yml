@@ -3,9 +3,15 @@ name: MLX runner probe
 # Reports what a GitHub-hosted macOS runner actually gives us before we commit
 # to running MLX work on it: CPU arch, RAM, core count, macOS + Xcode versions,
 # free disk, and - the thing that decides whether on-device inference is even
-# possible - whether Metal exposes a usable default device. Manual only.
+# possible - whether Metal exposes a usable default device.
+#
+# Runs as the FIRST GATE of the release process (called by release.yml): if the
+# runner image ever loses Metal or shrinks below our needs, the release fails
+# here in under a minute instead of 40 minutes into a bridge build. Manual
+# dispatch retained for ad-hoc checks.
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   probe:

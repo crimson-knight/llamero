@@ -1,21 +1,22 @@
 name: Specs
 
-# Per-push CI: the mock-bridge spec suite on Linux only.
+# Per-push CI: the mock-bridge spec suite, on macOS - the platform this shard
+# actually targets. A green Linux run would be false confidence for a
+# Metal/MLX product (maintainer decision, 2026-07-21). No bridge build here:
+# specs use the deterministic in-process mock bridge, so this stays fast.
 #
-# `crystal spec` runs against the deterministic in-process mock bridge - no
-# Metal, no model downloads, no Apple hardware - so ubuntu-latest (free and
-# quick to schedule) is all it needs. This is the ONLY workflow that runs on
-# push / PR.
+# Cost facts (docs.github.com, billing/concepts/product-billing/github-actions):
+# "GitHub Actions usage is free for self-hosted runners and for public
+# repositories that use standard GitHub-hosted runners" - macos-latest is a
+# standard runner, so this job is $0 on this public repo. NOT free even here:
+# larger runners ("Larger runners are always charged for, even when used by
+# public repositories"). Free-plan limit: max 5 concurrent macOS jobs. If this
+# repo ever goes private, standard macOS bills at $0.062/min - move macOS jobs
+# to self-hosted Apple runners (e.g. Tart ephemeral VMs) at that point.
 #
-# There is deliberately NO macOS job here. On a public repo GitHub-hosted macOS
-# minutes are free, so cost is not the reason - macOS runners are scarce and
-# slow to schedule, and gating every push on one would wreck iteration speed
-# (maintainer decision). The macOS legs - building the Swift MLX bridge and real
-# on-device inference - live in the workflow_dispatch-only workflows
-# (mlx-probe.yml, fresh-install-ci.yml) and the scheduled canary
-# (fresh-install-canary.yml). Private forks, where macOS minutes ARE billed,
-# should move any macOS jobs onto self-hosted Apple runners (e.g. Tart VMs on
-# Apple hardware).
+# The real-bridge macOS legs (build + on-device inference) live in
+# fresh-install-ci.yml and the weekly canary, and run as the release gate
+# chain in release.yml.
 on:
   push:
     branches: [main, v2-cli-backend]
@@ -23,7 +24,7 @@ on:
 
 jobs:
   spec:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
