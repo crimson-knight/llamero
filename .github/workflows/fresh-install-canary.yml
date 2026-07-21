@@ -1,0 +1,161 @@
+name: Fresh install canary
+
+# Truly cold weekly canary: NO caches anywhere, on purpose. A warm cache is what
+# let the 2026-07-06 gemma-4-e2b re-upload break the fresh-install path
+# silently, so this re-downloads and rebuilds everything from zero every run.
+#
+# Two jobs:
+#   pinned        - the supported path (revision-pinned model); a failure here
+#                   means new users are broken -> auto-open an issue.
+#   upstream-head - the UNPINNED upstream HEAD, EXPECTED TO FAIL today (the
+#                   2026-07-06 re-upload isn't loadable). If it starts PASSING,
+#                   the loader has caught up -> auto-open an "unpin" reminder.
+on:
+  schedule:
+    - cron: "0 10 * * 1"   # Mondays 10:00 UTC
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: "Skip all real work and force the failure path (cheaply tests the auto-issue wiring)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  pinned:
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - name: Simulated failure (auto-issue test)
+        id: simfail
+        if: ${{ inputs.simulate_failure }}
+        run: |
+          echo "simulate_failure=true - skipping install/download and failing on purpose."
+          exit 1
+
+      - uses: actions/checkout@v4
+        if: ${{ !inputs.simulate_failure }}
+
+      - name: Install Crystal
+        if: ${{ !inputs.simulate_failure }}
+        uses: crystal-lang/install-crystal@v1
+
+      - name: shards install
+        id: shards
+        if: ${{ !inputs.simulate_failure }}
+        run: shards install
+
+      - name: Ensure Metal toolchain
+        if: ${{ !inputs.simulate_failure }}
+        run: |
+          xcodebuild -downloadComponent MetalToolchain \
+            || echo "MetalToolchain download returned non-zero; continuing."
+
+      - name: Build the MLX bridge (cold)
+        id: build
+        if: ${{ !inputs.simulate_failure }}
+        run: native/llamero-mlx/build.sh
+
+      - name: Fresh-download smoke (pinned gemma-4-e2b, ~3.4GB)
+        id: smoke
+        if: ${{ !inputs.simulate_failure }}
+        run: scripts/smoke/fresh_download_smoke.sh
+
+      - name: Open or update the breakage issue
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          FAILED_STEP: >-
+            ${{ steps.simfail.conclusion == 'failure' && 'Simulated failure (auto-issue test)'
+             || steps.build.conclusion == 'failure' && 'Build the MLX bridge (cold)'
+             || steps.smoke.conclusion == 'failure' && 'Fresh-download smoke (pinned gemma-4-e2b)'
+             || steps.shards.conclusion == 'failure' && 'shards install'
+             || 'unknown (see the run for the red step)' }}
+        run: |
+          TITLE="[canary] Fresh install is broken"
+          BODY_FILE="$RUNNER_TEMP/breakage.md"
+          cat > "$BODY_FILE" <<EOF
+          The cold fresh-install canary failed on the \`pinned\` job.
+
+          - Run: $RUN_URL
+          - Failed step: $FAILED_STEP
+
+          This job runs with NO caches, so a failure means a new user's first
+          \`native/llamero-mlx/build.sh\` + fresh model download is broken. Likely
+          causes: an upstream repo re-upload (pin a known-good revision) or a
+          bridge build break.
+          EOF
+
+          EXISTING="$(gh issue list --state open --search "$TITLE in:title" --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)"
+          if [ -n "$EXISTING" ]; then
+            echo "Existing issue #$EXISTING - commenting."
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+          else
+            echo "No existing issue - creating one."
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi
+
+  upstream-head:
+    runs-on: macos-latest
+    timeout-minutes: 150
+    continue-on-error: true
+    if: ${{ !inputs.simulate_failure }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+
+      - name: shards install
+        run: shards install
+
+      - name: Ensure Metal toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain \
+            || echo "MetalToolchain download returned non-zero; continuing."
+
+      - name: Build the MLX bridge (cold)
+        run: native/llamero-mlx/build.sh
+
+      # UNPINNED upstream HEAD - expected to fail today. continue-on-error keeps
+      # the job green so we can branch on real success below.
+      - name: Smoke test against UNPINNED upstream HEAD
+        id: head
+        run: crystal run examples/native_smoke_test.cr -- mlx-community/gemma-4-e2b-it-4bit
+
+      - name: Upstream fixed the layout - file an unpin reminder
+        if: ${{ steps.head.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="[canary] Upstream supports the new gemma-4 layout - unpin the examples"
+          BODY_FILE="$RUNNER_TEMP/unpin.md"
+          cat > "$BODY_FILE" <<EOF
+          Good news: the UNPINNED upstream HEAD of \`mlx-community/gemma-4-e2b-it-4bit\`
+          now loads and runs on the current bridge.
+
+          - Run: $RUN_URL
+
+          The examples pin \`@2c3e507453b4f218d05fe3cc97bea5c5a654257e\` because the
+          2026-07-06 re-upload wasn't loadable. If this leg is passing, the loader
+          has caught up - consider removing the pin in
+          \`examples/native_smoke_test.cr\` and anywhere else it appears.
+          EOF
+
+          EXISTING="$(gh issue list --state open --search "$TITLE in:title" --json number,title \
+            --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)"
+          if [ -n "$EXISTING" ]; then
+            echo "Existing issue #$EXISTING - commenting."
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+          else
+            echo "No existing issue - creating one."
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi

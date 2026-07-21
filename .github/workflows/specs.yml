@@ -1,0 +1,35 @@
+name: Specs
+
+# Per-push CI: the mock-bridge spec suite on Linux only.
+#
+# `crystal spec` runs against the deterministic in-process mock bridge - no
+# Metal, no model downloads, no Apple hardware - so ubuntu-latest (free and
+# quick to schedule) is all it needs. This is the ONLY workflow that runs on
+# push / PR.
+#
+# There is deliberately NO macOS job here. On a public repo GitHub-hosted macOS
+# minutes are free, so cost is not the reason - macOS runners are scarce and
+# slow to schedule, and gating every push on one would wreck iteration speed
+# (maintainer decision). The macOS legs - building the Swift MLX bridge and real
+# on-device inference - live in the workflow_dispatch-only workflows
+# (mlx-probe.yml, fresh-install-ci.yml) and the scheduled canary
+# (fresh-install-canary.yml). Private forks, where macOS minutes ARE billed,
+# should move any macOS jobs onto self-hosted Apple runners (e.g. Tart VMs on
+# Apple hardware).
+on:
+  push:
+    branches: [main, v2-cli-backend]
+  pull_request:
+
+jobs:
+  spec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+      - name: shards install
+        run: shards install
+      - name: crystal spec
+        run: crystal spec

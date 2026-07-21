@@ -1,0 +1,47 @@
+name: MLX runner probe
+
+# Reports what a GitHub-hosted macOS runner actually gives us before we commit
+# to running MLX work on it: CPU arch, RAM, core count, macOS + Xcode versions,
+# free disk, and - the thing that decides whether on-device inference is even
+# possible - whether Metal exposes a usable default device. Manual only.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: System info
+        run: |
+          echo "== arch =="
+          uname -m
+          echo "== memory (bytes) =="
+          sysctl hw.memsize
+          echo "== cpu count =="
+          sysctl hw.ncpu
+          echo "== macOS =="
+          sw_vers
+          echo "== Xcode =="
+          xcodebuild -version
+          echo "== disk =="
+          df -h
+
+      - name: Metal availability
+        run: |
+          SWIFT_SRC="$RUNNER_TEMP/metal_check.swift"
+          cat > "$SWIFT_SRC" <<'SWIFT'
+          import Metal
+
+          if let device = MTLCreateSystemDefaultDevice() {
+              print("METAL_OK name=\(device.name) maxWorkingSet=\(device.recommendedMaxWorkingSetSize)")
+          } else {
+              print("METAL_NONE")
+          }
+          SWIFT
+          OUT="$(swift "$SWIFT_SRC")"
+          echo "$OUT"
+          case "$OUT" in
+            *METAL_OK*) echo "Metal default device present." ;;
+            *)          echo "No Metal device (METAL_NONE) - failing the probe." >&2; exit 1 ;;
+          esac

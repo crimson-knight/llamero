@@ -1,0 +1,85 @@
+name: Fresh install CI (macOS)
+
+# The full README install path, from zero, on Apple hardware: install Crystal,
+# shards install, build the Swift MLX bridge, then load + generate through the
+# real bridge for three model shapes:
+#   1. an MLX-converted 4-bit checkpoint,
+#   2. a plain (non-MLX) safetensors repo, and
+#   3. a GGUF-only repo that MUST fail with our actionable error.
+# Manual only - it builds the bridge and downloads models, so it is a
+# verification/release gate, not a per-push hook.
+on:
+  workflow_dispatch:
+
+jobs:
+  fresh-install:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+
+      - name: shards install
+        run: shards install
+
+      # SPM build artifacts for the bridge are safe to cache - they are a
+      # deterministic function of Package.resolved + the runner OS. MODELS ARE
+      # NEVER CACHED: a warm model cache is exactly what let the 2026-07-06
+      # gemma-4-e2b re-upload sail past every test.
+      - name: Cache SPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: native/llamero-mlx/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('native/llamero-mlx/Package.resolved') }}
+
+      - name: Ensure Metal toolchain
+        run: |
+          xcodebuild -downloadComponent MetalToolchain \
+            || echo "MetalToolchain download returned non-zero; continuing (it may already be installed)."
+
+      - name: Build the MLX bridge
+        run: native/llamero-mlx/build.sh
+
+      - name: "1. MLX-format tiny model loads and generates"
+        run: |
+          export LLAMERO_HOME="$RUNNER_TEMP/home-mlx"
+          mkdir -p "$LLAMERO_HOME"
+          crystal run examples/ci_load_and_generate.cr -- mlx-community/Qwen2.5-0.5B-Instruct-4bit
+
+      - name: "2. Plain (non-MLX) safetensors model loads and generates"
+        run: |
+          export LLAMERO_HOME="$RUNNER_TEMP/home-plain"
+          mkdir -p "$LLAMERO_HOME"
+          crystal run examples/ci_load_and_generate.cr -- HuggingFaceTB/SmolLM2-135M-Instruct
+
+      - name: "3. GGUF-only repo fails with the actionable message"
+        run: |
+          export LLAMERO_HOME="$RUNNER_TEMP/home-gguf"
+          mkdir -p "$LLAMERO_HOME"
+          GGUF_REPO="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
+
+          # Guard the fixture: this negative test only proves something if the
+          # repo genuinely ships no .safetensors weights (it has a config.json
+          # but only .gguf files), so verify that against the live Hub first.
+          if curl -sf "https://huggingface.co/api/models/${GGUF_REPO}" | grep -q '\.safetensors'; then
+            echo "Fixture drift: ${GGUF_REPO} now advertises .safetensors - pick another GGUF-only repo." >&2
+            exit 1
+          fi
+
+          set +e
+          OUT="$(crystal run examples/ci_load_and_generate.cr -- "$GGUF_REPO" 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+
+          if [ "$CODE" -eq 0 ]; then
+            echo "FAIL: expected a non-zero exit for a GGUF-only repo, got 0." >&2
+            exit 1
+          fi
+          if ! echo "$OUT" | grep -q "has no .safetensors weights"; then
+            echo "FAIL: expected the 'has no .safetensors weights' guidance in the output." >&2
+            exit 1
+          fi
+          echo "Negative test passed: GGUF-only repo rejected (exit ${CODE}) with the actionable message."
