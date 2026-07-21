@@ -22,6 +22,8 @@ jobs:
 
       - name: Install Crystal
         uses: crystal-lang/install-crystal@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: shards install
         run: shards install
