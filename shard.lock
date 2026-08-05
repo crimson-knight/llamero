@@ -1,0 +1,10 @@
+version: 2.0
+shards:
+  crinja:
+    git: https://github.com/straight-shoota/crinja.git
+    version: 0.9.0
+
+  webmock:
+    git: https://github.com/manastech/webmock.cr.git
+    version: 0.14.0
+
