@@ -25,3 +25,4 @@ dependencies:
 development_dependencies:
   webmock:
     github: manastech/webmock.cr
+    commit: 42b347cdd64e13193e46167a03593944ae2b3d20  # was unconstrained; lock resolved v0.14.0 -> 42b347c
