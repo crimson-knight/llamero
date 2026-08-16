@@ -261,6 +261,13 @@ stream lifecycle, event mapping, and error paths run on any platform.
 5. **v2 options**: PCM-streaming TTS (Marvis via mlx-audio-swift backend),
    diarization events, bridge-side capture helper, video input.
 
+> **Audio product plan (2026-06-21):** Phases 3–5's audio items are now built —
+> see `audio_conversation_roadmap.md` (code-anchored spec + on-device
+> verification log) and `audio_integration_guide.md`. Shipped: durable
+> transcript journal, dual-channel meeting mode, streaming Kokoro TTS,
+> barge-in, Silero VAD, and a full `ConversationSession` loop. Capture
+> decision: native Core Audio process taps, no loopback driver.
+
 ## Known issue: adapter training on Gemma 4 e-series
 
 Verified 2026-06-11: training a LoRA adapter on `gemma-4-e2b-it-4bit`
@@ -294,3 +301,26 @@ layers). Until then: e-series for inference, dense models for training.
   cloning vs Marvis — pick after listening tests.
 - Should `AudioRuntime` and `MLXRuntime` share a session/event bus for the
   desktop lab UI, or stay independent until the UI phase forces the question?
+
+## Vision implementation progress (2026-07-21)
+
+**Status:** Phase 1 verified on-device. The existing MLX dylib now links the
+revision-pinned MLXVLM product and routes checkpoints containing
+`vision_config` through `VLMModelFactory`; text-only checkpoints continue
+through `LLMModelFactory`. The verified default is
+`mlx-community/gemma-3-4b-it-qat-4bit@3d9ef289111449933c22761961f16a5df237ce2a`
+(3.035 GB cache on disk).
+
+The path-only v1 proposal was extended with additive encoded-image bytes:
+`llamero_mlx_session_generate_vision_path` accepts `messages[].images`, while
+`llamero_mlx_session_generate_vision_bytes` copies an encoded JPEG/PNG buffer
+before detached inference. This avoids a webcam temp-file round trip without
+changing `llamero_mlx_session_generate`. Crystal adds `Message#images`,
+`ModelSession#generate(_stream)(..., image_path:)`, and the corresponding
+`image_bytes:` overload.
+
+M1 Max verification: release bridge and Crystal example compiled with zero
+errors/warnings; model load 17.226s at 2,859.9 MB active MLX memory; path input
+64 tokens at 74.5 tok/s (4.774s image+prompt), JPEG bytes 64 tokens at 45.0
+tok/s (1.879s image+prompt). Both identified the generated red circle, and the
+unchanged text ABI passed `ci_load_and_generate.cr` afterward.

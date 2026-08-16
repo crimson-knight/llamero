@@ -233,4 +233,49 @@ describe Llamero::Native::AudioStream do
 
     bridge.stream_asr_loaded?(1_i64).should be_false
   end
+
+  it "stamps the stream source onto every utterance" do
+    runtime, bridge = mock_stream_setup
+    bridge.scripted_utterances << "from the mic"
+
+    stream = runtime.start_stream(source: "mic")
+    stream.source.should eq("mic")
+    utterances = [] of Llamero::Native::Utterance
+    stream.on_utterance { |utterance| utterances << utterance }
+
+    3.times { stream.push(silence) }
+    utterances.map(&.source).should eq(["mic"])
+  end
+
+  it "journals finalized utterances durably — a crash before finish keeps them" do
+    path = File.join(Dir.tempdir, "llamero-stream-journal-#{Random.rand(1_000_000)}.jsonl")
+    runtime, bridge = mock_stream_setup
+    bridge.scripted_utterances << "first phrase"
+    bridge.scripted_utterances << "second phrase here"
+
+    stream = runtime.start_stream(source: "system", journal: path)
+    5.times { stream.push(silence) } # 2 + 3 words = 5 pushes, both utterances finalize
+    # Simulate a crash: never call finish/close. The journal is already on disk.
+
+    entries = Llamero::Native::TranscriptJournal.read(path)
+    entries.map(&.text).should eq(["first phrase", "second phrase here"])
+    entries.map(&.source).should eq(["system", "system"])
+    entries[0].seq.should eq(0)
+  ensure
+    File.delete(path) if path && File.exists?(path)
+  end
+
+  it "journals the trailing utterance flushed on finish" do
+    path = File.join(Dir.tempdir, "llamero-stream-journal-#{Random.rand(1_000_000)}.jsonl")
+    runtime, bridge = mock_stream_setup
+    bridge.scripted_utterances << "alpha beta gamma"
+
+    stream = runtime.start_stream(journal: path)
+    stream.push(silence) # only "alpha" revealed; utterance still in flight
+    stream.finish        # flush emits the trailing utterance_end
+
+    Llamero::Native::TranscriptJournal.read(path).map(&.text).should eq(["alpha beta gamma"])
+  ensure
+    File.delete(path) if path && File.exists?(path)
+  end
 end

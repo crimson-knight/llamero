@@ -29,6 +29,8 @@ module Llamero::Native
   # int32_t llamero_mlx_session_load_model(int64_t session, const char *json_request, llamero_event_callback cb, void *user_data);
   # int32_t llamero_mlx_session_activate_adapters(int64_t session, const char *json_stack, llamero_event_callback cb, void *user_data);
   # int32_t llamero_mlx_session_generate(int64_t session, const char *json_request, llamero_event_callback cb, void *user_data);
+  # int32_t llamero_mlx_session_generate_vision_path(int64_t session, const char *json_request, llamero_event_callback cb, void *user_data);
+  # int32_t llamero_mlx_session_generate_vision_bytes(int64_t session, const char *json_request, const uint8_t *image, int64_t length, llamero_event_callback cb, void *user_data);
   # int32_t llamero_mlx_session_train_adapter(int64_t session, const char *json_config, llamero_event_callback cb, void *user_data);
   # ```
   #
@@ -65,6 +67,8 @@ module Llamero::Native
     @session_load_model : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @session_activate_adapters : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @session_generate : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
+    @session_generate_vision_path : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
+    @session_generate_vision_bytes : Proc(Int64, LibC::Char*, UInt8*, Int64, Void*, Void*, Int32)
     @session_train_adapter : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @session_grpo_loop : Proc(Int64, LibC::Char*, Void*, Void*, Void*, Void*, Int32)
 
@@ -119,6 +123,8 @@ module Llamero::Native
       @session_load_model = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_load_model"), Pointer(Void).null)
       @session_activate_adapters = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_activate_adapters"), Pointer(Void).null)
       @session_generate = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_generate"), Pointer(Void).null)
+      @session_generate_vision_path = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_generate_vision_path"), Pointer(Void).null)
+      @session_generate_vision_bytes = Proc(Int64, LibC::Char*, UInt8*, Int64, Void*, Void*, Int32).new(symbol("llamero_mlx_session_generate_vision_bytes"), Pointer(Void).null)
       @session_train_adapter = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_train_adapter"), Pointer(Void).null)
       @session_grpo_loop = Proc(Int64, LibC::Char*, Void*, Void*, Void*, Void*, Int32).new(symbol("llamero_mlx_session_grpo_loop"), Pointer(Void).null)
     end
@@ -170,6 +176,22 @@ module Llamero::Native
     def generate(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
       with_events(on_event) do |callback, user_data|
         @session_generate.call(session, request_json.to_unsafe, callback, user_data)
+      end
+    end
+
+    def generate_vision_path(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
+      with_events(on_event) do |callback, user_data|
+        @session_generate_vision_path.call(session, request_json.to_unsafe, callback, user_data)
+      end
+    end
+
+    def generate_vision_bytes(session : Int64, request_json : String, image_bytes : Bytes, &on_event : JSON::Any ->) : Nil
+      raise ArgumentError.new("image_bytes cannot be empty") if image_bytes.empty?
+      with_events(on_event) do |callback, user_data|
+        @session_generate_vision_bytes.call(
+          session, request_json.to_unsafe, image_bytes.to_unsafe,
+          image_bytes.size.to_i64, callback, user_data
+        )
       end
     end
 

@@ -407,7 +407,70 @@ module Llamero::Native
     ) : NativeChatResponse(Nil)
       ensure_loaded
       request = build_request(messages, temperature, max_tokens, structured: false)
-      content, metrics, finish_reason = run_generation(request) do |delta|
+      content, metrics, finish_reason = run_generation(
+        request, vision_paths: messages.any? { |message| !message.images.empty? }
+      ) do |delta|
+        block.call(delta)
+      end
+
+      NativeChatResponse(Nil).new(
+        content: content,
+        model_id: @model_id,
+        session_id: @session_id,
+        metrics: metrics,
+        adapter_stack: @active_adapter_stack,
+        finish_reason: finish_reason
+      )
+    end
+
+    # Convenience vision call for one local image. The image path is expanded
+    # Crystal-side and the resident VLM stays loaded for subsequent calls.
+    # This method is blocking; UI apps should invoke it from their existing
+    # inference worker, just like chat/chat_stream.
+    def generate(
+      prompt : String,
+      image_path : Path | String,
+      temperature : Float32? = nil,
+      max_tokens : Int32? = nil,
+    ) : NativeChatResponse(Nil)
+      generate_stream(prompt, image_path, temperature, max_tokens) { }
+    end
+
+    def generate_stream(
+      prompt : String,
+      image_path : Path | String,
+      temperature : Float32? = nil,
+      max_tokens : Int32? = nil,
+      &block : String -> Nil
+    ) : NativeChatResponse(Nil)
+      message = Message.user(prompt, images: [Path[image_path].expand])
+      chat_stream([message], temperature, max_tokens) { |delta| block.call(delta) }
+    end
+
+    # Zero-temp-file vision call for encoded image bytes. The C bridge copies
+    # the buffer synchronously before its detached MLX task starts, so webcam
+    # capture code may reuse the source buffer once this blocking call returns.
+    def generate(
+      prompt : String,
+      image_bytes : Bytes,
+      temperature : Float32? = nil,
+      max_tokens : Int32? = nil,
+    ) : NativeChatResponse(Nil)
+      generate_stream(prompt, image_bytes, temperature, max_tokens) { }
+    end
+
+    def generate_stream(
+      prompt : String,
+      image_bytes : Bytes,
+      temperature : Float32? = nil,
+      max_tokens : Int32? = nil,
+      &block : String -> Nil
+    ) : NativeChatResponse(Nil)
+      ensure_loaded
+      raise ArgumentError.new("image_bytes cannot be empty") if image_bytes.empty?
+
+      request = build_request([Message.user(prompt)], temperature, max_tokens, structured: false)
+      content, metrics, finish_reason = run_generation(request, image_bytes: image_bytes) do |delta|
         block.call(delta)
       end
 
@@ -443,7 +506,9 @@ module Llamero::Native
       prompted = inject_schema_instruction(messages, schema_json)
       request = build_request(prompted, temperature, max_tokens, structured: true, schema_json: schema_json)
 
-      content, metrics, finish_reason = run_generation(request) { }
+      content, metrics, finish_reason = run_generation(
+        request, vision_paths: prompted.any? { |message| !message.images.empty? }
+      ) { }
 
       json_text = extract_json(content)
       parsed = begin
@@ -507,13 +572,18 @@ module Llamero::Native
       end
     end
 
-    private def run_generation(request_json : String, &on_delta : String ->) : {String, GenerationMetrics, String}
+    private def run_generation(
+      request_json : String,
+      vision_paths : Bool = false,
+      image_bytes : Bytes? = nil,
+      &on_delta : String ->
+    ) : {String, GenerationMetrics, String}
       content = String::Builder.new
       metrics = GenerationMetrics.new
       finish_reason = "stop"
       error : NativeErrorEvent? = nil
 
-      @bridge.generate(@handle, request_json) do |frame|
+      receive = ->(frame : JSON::Any) do
         event = dispatch(frame)
         case event
         when TokenDeltaEvent
@@ -528,6 +598,15 @@ module Llamero::Native
         when NativeErrorEvent
           error = event
         end
+        nil
+      end
+
+      if bytes = image_bytes
+        @bridge.generate_vision_bytes(@handle, request_json, bytes) { |frame| receive.call(frame) }
+      elsif vision_paths
+        @bridge.generate_vision_path(@handle, request_json) { |frame| receive.call(frame) }
+      else
+        @bridge.generate(@handle, request_json) { |frame| receive.call(frame) }
       end
 
       if failure = error
@@ -562,6 +641,13 @@ module Llamero::Native
                 json.object do
                   json.field "role", message.role.to_s.downcase
                   json.field "content", message.content
+                  unless message.images.empty?
+                    json.field "images" do
+                      json.array do
+                        message.images.each { |path| json.string(path.expand.to_s) }
+                      end
+                    end
+                  end
                 end
               end
             end

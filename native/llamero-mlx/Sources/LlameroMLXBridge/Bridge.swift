@@ -11,6 +11,7 @@
 // - Errors surface both as an `error` event frame and a nonzero status.
 
 import Foundation
+import CoreImage
 import HuggingFace
 import MLX
 import MLXHuggingFace
@@ -18,6 +19,7 @@ import MLXLLM
 import MLXLMCommon
 import MLXNN
 import MLXOptimizers
+import MLXVLM
 import Tokenizers
 
 // Macro-free model loading. Replicates exactly what the MLXHuggingFace
@@ -112,6 +114,7 @@ struct LoadRequest: Codable {
 struct RequestMessage: Codable {
     var role: String
     var content: String
+    var images: [String]?
 }
 
 struct GenerateRequest: Codable {
@@ -219,7 +222,33 @@ struct StackPayload: Codable {
 
 struct BridgeError: Error, CustomStringConvertible {
     let message: String
+    let code: String
+
+    init(message: String, code: String = "native_error") {
+        self.message = message
+        self.code = code
+    }
+
     var description: String { message }
+}
+
+enum ModelKind: String {
+    case text
+    case vision
+}
+
+private func modelKind(in directory: URL) throws -> ModelKind {
+    let configURL = directory.appending(component: "config.json")
+    let data = try Data(contentsOf: configURL)
+    guard let config = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        throw BridgeError(message: "Invalid model config at \(configURL.path)")
+    }
+
+    // Gemma text-only checkpoints use gemma3_text/gemma4_text and omit a
+    // vision_config. Multimodal checkpoints carry the vision tower in the
+    // top-level config, which is the reliable discriminator even when the
+    // family model_type (gemma3/gemma4) is understood by both factories.
+    return config["vision_config"] == nil ? .text : .vision
 }
 
 // Local directory loads bypass mlx-swift-lm's model registry entries, so keep
@@ -384,6 +413,7 @@ final class SessionBox: @unchecked Sendable {
     let runtime: RuntimeBox
     var container: ModelContainer?
     var loaded = false
+    var modelKind: ModelKind = .text
     var activeAdapters: [(name: String, adapter: any ModelAdapter)] = []
     var adapterStackId = "base"
 
@@ -596,7 +626,7 @@ public func llamero_mlx_runtime_create(_ configJson: UnsafePointer<CChar>?) -> I
     else { return -1 }
 
     if let limit = config.cacheLimitBytes {
-        MLX.GPU.set(cacheLimit: Int(limit))
+        MLX.Memory.cacheLimit = Int(limit)
     }
     return BridgeRegistry.shared.addRuntime(RuntimeBox(config: config))
 }
@@ -652,33 +682,48 @@ public func llamero_mlx_session_load_model(
             // through the main actor), so it only works inside Swift apps -
             // never under a Crystal/C host with a blocked main thread.
             let configuration: ModelConfiguration
+            let kind: ModelKind
             if let path = request.modelPath ?? session.runtime.config.modelPath {
                 let modelDirectory = URL(fileURLWithPath: path)
+                kind = try modelKind(in: modelDirectory)
                 configuration = ModelConfiguration(
                     directory: modelDirectory,
                     extraEOSTokens: inferredExtraEOSTokens(modelDirectory: modelDirectory)
                 )
             } else {
+                kind = .text
                 configuration = ModelConfiguration(id: session.runtime.config.modelId)
             }
 
             let wasLoaded = session.loaded
-            let container = try await loadModelContainer(
-                from: LocalOnlyDownloader(),
-                using: LlameroTokenizerLoader(),
-                configuration: configuration,
-                progressHandler: { _ in })
+            let container: ModelContainer
+            switch kind {
+            case .vision:
+                container = try await VLMModelFactory.shared.loadContainer(
+                    from: LocalOnlyDownloader(),
+                    using: LlameroTokenizerLoader(),
+                    configuration: configuration,
+                    progressHandler: { _ in })
+            case .text:
+                container = try await LLMModelFactory.shared.loadContainer(
+                    from: LocalOnlyDownloader(),
+                    using: LlameroTokenizerLoader(),
+                    configuration: configuration,
+                    progressHandler: { _ in })
+            }
 
             session.container = container
             session.loaded = true
+            session.modelKind = kind
             session.activeAdapters = []
 
             let elapsedMs = Date().timeIntervalSince(start) * 1000
             sink.emit([
                 "event": "model_loaded",
                 "load_time_ms": elapsedMs,
-                "memory_bytes": MLX.GPU.activeMemory,
+                "memory_bytes": MLX.Memory.activeMemory,
                 "reloaded": wasLoaded,
+                "vision_capable": kind == .vision,
             ])
             sink.finish()
         } catch {
@@ -867,6 +912,8 @@ public func llamero_mlx_session_train_adapter(
                 saveEvery: Int.max,
                 adapterURL: nil
             )
+            let trainingData = train
+            let validationData = valid
 
             let start = Date()
 
@@ -918,7 +965,7 @@ public func llamero_mlx_session_train_adapter(
                         }
                     default:
                         try LoRATrain.train(
-                            model: context.model, train: train, validate: valid,
+                            model: context.model, train: trainingData, validate: validationData,
                             optimizer: Adam(learningRate: request.learningRate),
                             tokenizer: trainingTokenizer, parameters: parameters
                         ) { progress in
@@ -943,9 +990,9 @@ public func llamero_mlx_session_train_adapter(
                             return .more
                         }
 
-                        if !valid.isEmpty {
-                            let finalValidation = try LoRATrain.evaluate(
-                                model: context.model, dataset: valid, tokenizer: trainingTokenizer,
+                        if !validationData.isEmpty {
+                            let finalValidation = LoRATrain.evaluate(
+                                model: context.model, dataset: validationData, tokenizer: trainingTokenizer,
                                 batchSize: request.batchSize, batchCount: 0
                             )
                             lastValidation = Double(finalValidation)
@@ -1135,6 +1182,81 @@ public func llamero_mlx_session_generate(
     _ callback: LlameroEventCallback?,
     _ userData: UnsafeMutableRawPointer?
 ) -> Int32 {
+    generate(
+        handle: handle, requestJson: requestJson, inMemoryImage: nil,
+        requireImage: false, callback: callback, userData: userData)
+}
+
+/// Vision generation using image paths carried by messages[].images in the
+/// JSON request. This is a separate additive entry point so clients can
+/// feature-detect vision support without changing the original text ABI.
+@_cdecl("llamero_mlx_session_generate_vision_path")
+public func llamero_mlx_session_generate_vision_path(
+    _ handle: Int64,
+    _ requestJson: UnsafePointer<CChar>?,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    generate(
+        handle: handle, requestJson: requestJson, inMemoryImage: nil,
+        requireImage: true, callback: callback, userData: userData)
+}
+
+/// Vision generation from one encoded image (JPEG, PNG, HEIC, or another
+/// Core Image format). The bytes are copied before async work starts, so the
+/// caller only needs to keep its buffer alive for this blocking C call.
+@_cdecl("llamero_mlx_session_generate_vision_bytes")
+public func llamero_mlx_session_generate_vision_bytes(
+    _ handle: Int64,
+    _ requestJson: UnsafePointer<CChar>?,
+    _ imageBytes: UnsafePointer<UInt8>?,
+    _ imageLength: Int64,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard imageLength > 0, imageLength <= Int64(Int.max), let imageBytes else {
+        return immediateGenerationFailure(
+            handle: handle, message: "Encoded image buffer is empty",
+            code: "image_load_failed", callback: callback, userData: userData)
+    }
+
+    let imageData = Data(bytes: imageBytes, count: Int(imageLength))
+    guard let image = CIImage(data: imageData) else {
+        return immediateGenerationFailure(
+            handle: handle, message: "Encoded image bytes are not a readable image",
+            code: "image_load_failed", callback: callback, userData: userData)
+    }
+
+    return generate(
+        handle: handle, requestJson: requestJson, inMemoryImage: image,
+        requireImage: true, callback: callback, userData: userData)
+}
+
+private func immediateGenerationFailure(
+    handle: Int64,
+    message: String,
+    code: String,
+    callback: LlameroEventCallback?,
+    userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let session = BridgeRegistry.shared.session(handle) else { return 2 }
+    let sink = EventSink(
+        sessionId: "mlx-session-\(handle)", modelId: session.modelId,
+        adapterStackId: session.adapterStackId)
+    sink.fail(
+        message: message, code: code, recoverable: true,
+        baseModelLoaded: session.loaded)
+    return sink.drain(callback: callback, userData: userData)
+}
+
+private func generate(
+    handle: Int64,
+    requestJson: UnsafePointer<CChar>?,
+    inMemoryImage: CIImage?,
+    requireImage: Bool,
+    callback: LlameroEventCallback?,
+    userData: UnsafeMutableRawPointer?
+) -> Int32 {
     guard let session = BridgeRegistry.shared.session(handle) else { return 2 }
     guard let requestJson,
         let data = String(cString: requestJson).data(using: .utf8),
@@ -1159,21 +1281,50 @@ public func llamero_mlx_session_generate(
         }
 
         do {
-            let chat: [Chat.Message] = request.messages.map { message in
+            let lastUserIndex = request.messages.lastIndex { $0.role == "user" }
+            let chat: [Chat.Message] = try request.messages.enumerated().map { index, message in
+                var images = try (message.images ?? []).map { path -> UserInput.Image in
+                    let url = URL(fileURLWithPath: path)
+                    guard FileManager.default.isReadableFile(atPath: url.path) else {
+                        throw BridgeError(
+                            message: "Image file is missing or unreadable: \(url.path)",
+                            code: "image_load_failed")
+                    }
+                    return .url(url)
+                }
+                if index == lastUserIndex, let inMemoryImage {
+                    images.append(.ciImage(inMemoryImage))
+                }
+
                 switch message.role {
-                case "system": return .system(message.content)
-                case "assistant": return .assistant(message.content)
-                default: return .user(message.content)
+                case "system": return .system(message.content, images: images)
+                case "assistant": return .assistant(message.content, images: images)
+                default: return .user(message.content, images: images)
                 }
             }
 
-            var parameters = GenerateParameters()
-            if let temperature = request.temperature { parameters.temperature = temperature }
-            if let maxTokens = request.maxTokens { parameters.maxTokens = maxTokens }
+            let imageCount = chat.reduce(0) { $0 + $1.images.count }
+            if requireImage && imageCount == 0 {
+                throw BridgeError(
+                    message: "Vision generation requires at least one image",
+                    code: "image_load_failed")
+            }
+            if imageCount > 0 && session.modelKind != .vision {
+                throw BridgeError(
+                    message: "The loaded model \(session.modelId) is text-only and cannot accept images",
+                    code: "vision_not_supported")
+            }
+
+            let parameters: GenerateParameters = {
+                var parameters = GenerateParameters()
+                if let temperature = request.temperature { parameters.temperature = temperature }
+                if let maxTokens = request.maxTokens { parameters.maxTokens = maxTokens }
+                return parameters
+            }()
 
             let deltaEvent = (request.structured ?? false) ? "structured_json_delta" : "token_delta"
 
-            try await container.perform { context in
+            try await container.perform(nonSendable: chat) { context, chat in
                 let input = try await context.processor.prepare(input: UserInput(chat: chat))
                 let stream = try MLXLMCommon.generate(input: input, parameters: parameters, context: context)
 
@@ -1197,6 +1348,13 @@ public func llamero_mlx_session_generate(
                 }
             }
             sink.finish()
+        } catch let error as BridgeError {
+            sink.fail(
+                message: error.message,
+                code: error.code,
+                recoverable: true,
+                baseModelLoaded: session.loaded
+            )
         } catch {
             sink.fail(
                 message: "Generation failed: \(error)",

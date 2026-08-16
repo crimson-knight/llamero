@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/bridge-repro'
+relocations:     []
+...

@@ -1,4 +1,5 @@
 require "json"
+require "base64"
 require "./audio_bridge"
 
 module Llamero::Native
@@ -12,17 +13,17 @@ module Llamero::Native
   # word of the next scripted utterance per push (see `scripted_utterances`
   # and StreamState below).
   #
-  # ```crystal
+  # ```
   # bridge = Llamero::Native::MockAudioBridge.new
   # bridge.scripted_transcripts << "hello from the mock"
   # audio = Llamero::Native::AudioRuntime.new(bridge: bridge)
   # ```
   class MockAudioBridge < AudioBridge
     # Deterministic metrics every mock operation reports.
-    ASR_LOAD_TIME_MS  = 80.0
-    TTS_LOAD_TIME_MS  = 60.0
-    PROCESSING_TIME_MS = 25.0
-    SYNTHESIS_TIME_MS  = 30.0
+    ASR_LOAD_TIME_MS   =   80.0
+    TTS_LOAD_TIME_MS   =   60.0
+    PROCESSING_TIME_MS =   25.0
+    SYNTHESIS_TIME_MS  =   30.0
     SAMPLE_RATE        = 16_000
     # Synthetic per-word segment timing.
     WORD_SPACING_MS = 500.0
@@ -33,11 +34,26 @@ module Llamero::Native
       property asr_loaded = false
       property diarizer_loaded = false
       property tts_loaded = false
+      # Set by cancel_speak, checked between chunks of a streaming speak.
+      property speak_cancel = false
       # Streaming (Parakeet EOU) models are separate from the one-shot ASR
       # models and load lazily on a stream's first push.
       property stream_asr_loaded = false
+      # Silero VAD model loads lazily on a VAD stream's first push.
+      property vad_loaded = false
 
       def initialize(@config : JSON::Any)
+      end
+    end
+
+    # Deterministic mock VAD state: a push whose peak amplitude exceeds a fixed
+    # cutoff counts as speech, so specs drive speech_started/ended by feeding
+    # loud vs silent slices.
+    private class VadState
+      property runtime : Int64
+      property triggered = false
+
+      def initialize(@runtime : Int64)
       end
     end
 
@@ -50,6 +66,9 @@ module Llamero::Native
     private class StreamState
       property runtime : Int64
       property chunk_ms : Int32
+      # Capture-source label from the stream config (e.g. "mic"/"system" or a
+      # MeetingSession's "Me"/"Them"); selects a per-source scripted queue.
+      property source : String? = nil
       property pushed_samples = 0_i64
       property push_count = 0
       property current_utterance : String?
@@ -74,6 +93,12 @@ module Llamero::Native
     # the queue is empty, pushes emit empty partials (silence).
     getter scripted_utterances = [] of String
 
+    # Per-source scripted streaming utterances, keyed by a stream's `source`
+    # label (e.g. "Me"/"Them" for a MeetingSession). A labeled stream draws
+    # from its own queue first, then falls back to `scripted_utterances`. Lets
+    # specs script each channel of a dual-source meeting independently.
+    getter scripted_utterances_by_source = {} of String => Array(String)
+
     # Failure knobs: set to true to make the next matching call emit an
     # error event (the knob resets automatically; the runtime stays usable).
     property fail_next_transcription = false
@@ -86,6 +111,7 @@ module Llamero::Native
       @next_handle = 1_i64
       @runtimes = {} of Int64 => RuntimeState
       @streams = {} of Int64 => StreamState
+      @vad_streams = {} of Int64 => VadState
     end
 
     def name : String
@@ -106,6 +132,7 @@ module Llamero::Native
       @runtimes.delete(runtime)
       # Streams cannot outlive their parent runtime.
       @streams.reject! { |_, state| state.runtime == runtime }
+      @vad_streams.reject! { |_, state| state.runtime == runtime }
     end
 
     def transcribe_file(runtime : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
@@ -194,16 +221,16 @@ module Llamero::Native
       end
 
       emit(on_event, runtime, {
-        "event" => "diarized_transcript_final",
-        "text" => text,
-        "segments" => diarized_segments,
-        "word_segments" => word_segments,
-        "speaker_segments" => speaker_segments,
-        "duration_ms" => duration_ms,
-        "processing_time_ms" => PROCESSING_TIME_MS * 2,
-        "asr_processing_time_ms" => PROCESSING_TIME_MS,
+        "event"                          => "diarized_transcript_final",
+        "text"                           => text,
+        "segments"                       => diarized_segments,
+        "word_segments"                  => word_segments,
+        "speaker_segments"               => speaker_segments,
+        "duration_ms"                    => duration_ms,
+        "processing_time_ms"             => PROCESSING_TIME_MS * 2,
+        "asr_processing_time_ms"         => PROCESSING_TIME_MS,
         "diarization_processing_time_ms" => PROCESSING_TIME_MS,
-        "confidence" => 1.0,
+        "confidence"                     => 1.0,
       })
     end
 
@@ -235,6 +262,11 @@ module Llamero::Native
         state.tts_loaded = true
       end
 
+      if request["stream"]?.try(&.as_bool?)
+        speak_streaming_mock(state, runtime, text, on_event)
+        return
+      end
+
       output_path = request["output_path"]?.try(&.as_s) ||
                     File.join(Dir.tempdir, "llamero-mock-speak-#{runtime}-#{Time.utc.to_unix_ms}.wav")
 
@@ -250,12 +282,60 @@ module Llamero::Native
       })
     end
 
+    # Requests barge-in cancellation of an in-flight streaming speak.
+    def cancel_speak(runtime : Int64) : Nil
+      @runtimes[runtime]?.try(&.speak_cancel = true)
+    end
+
+    # Deterministic streaming TTS: one speech_chunk (silent PCM) per sentence,
+    # checking the cancel flag before each, then speak_completed — or
+    # speech_cancelled if barge-in fired. Mirrors the real bridge's shape.
+    private def speak_streaming_mock(state : RuntimeState, runtime : Int64, text : String, on_event : JSON::Any ->) : Nil
+      state.speak_cancel = false
+      sentences = text.split(/(?<=[.!?])\s+/).reject(&.blank?)
+      sentences = [text] if sentences.empty?
+      total_samples = 0
+
+      sentences.each_with_index do |sentence, index|
+        if state.speak_cancel
+          emit(on_event, runtime, {
+            "event" => "speech_cancelled", "chunk_index" => index,
+            "duration_ms" => total_samples * 1000.0 / SAMPLE_RATE,
+          })
+          state.speak_cancel = false
+          return
+        end
+        # 100ms of silence per word, encoded as int16 LE base64 (what the real
+        # bridge sends, just silent).
+        samples = Math.max(SAMPLE_RATE // 10, sentence.split.size * SAMPLE_RATE // 10)
+        total_samples += samples
+        emit(on_event, runtime, {
+          "event"       => "speech_chunk",
+          "chunk_index" => index,
+          "pcm_base64"  => Base64.strict_encode(Bytes.new(samples * 2, 0_u8)),
+          "sample_rate" => SAMPLE_RATE,
+          "duration_ms" => samples * 1000.0 / SAMPLE_RATE,
+          "is_final"    => index == sentences.size - 1,
+        })
+      end
+
+      output_path = File.join(Dir.tempdir, "llamero-mock-speak-#{runtime}-#{Time.utc.to_unix_ms}.wav")
+      write_silent_wav(output_path, total_samples)
+      emit(on_event, runtime, {
+        "event" => "speak_completed", "path" => output_path,
+        "duration_ms" => total_samples * 1000.0 / SAMPLE_RATE,
+        "synthesis_time_ms" => SYNTHESIS_TIME_MS, "sample_rate" => SAMPLE_RATE,
+      })
+    end
+
     def stream_create(runtime : Int64, config_json : String) : Int64
       runtime_state(runtime) # validates the parent handle
       config = JSON.parse(config_json)
       chunk_ms = config["chunk_ms"]?.try(&.as_i) || 160
       handle = next_handle
-      @streams[handle] = StreamState.new(runtime, chunk_ms)
+      state = StreamState.new(runtime, chunk_ms)
+      state.source = config["source"]?.try(&.as_s?)
+      @streams[handle] = state
       handle
     end
 
@@ -279,7 +359,7 @@ module Llamero::Native
       state.push_count += 1
       state.pushed_samples += count
 
-      if state.current_utterance.nil? && (next_text = @scripted_utterances.shift?)
+      if state.current_utterance.nil? && (next_text = next_scripted_utterance(state))
         state.current_utterance = next_text
         state.words = next_text.split
         state.word_index = 0
@@ -333,6 +413,48 @@ module Llamero::Native
 
     def stream_free(stream : Int64) : Nil
       @streams.delete(stream)
+    end
+
+    # Mock VAD: peak amplitude > 0.1 counts as speech; emits speech_started on
+    # the silence->speech transition and speech_ended on speech->silence.
+    VAD_SPEECH_CUTOFF = 0.1_f32
+
+    def vad_create(runtime : Int64, config_json : String) : Int64
+      runtime_state(runtime) # validates the parent handle
+      handle = next_handle
+      @vad_streams[handle] = VadState.new(runtime)
+      handle
+    end
+
+    def vad_push(vad : Int64, samples : Pointer(Float32), count : Int32, &on_event : JSON::Any ->) : Nil
+      state = @vad_streams[vad]? || raise BridgeUnavailableError.new("Unknown VAD stream handle: #{vad}")
+      runtime = runtime_state(state.runtime)
+
+      unless runtime.vad_loaded
+        emit_vad(on_event, vad, {"event" => "vad_model_load_started"})
+        emit_vad(on_event, vad, {"event" => "vad_model_load_progress", "progress" => 1.0})
+        emit_vad(on_event, vad, {"event" => "vad_model_loaded", "load_time_ms" => ASR_LOAD_TIME_MS})
+        runtime.vad_loaded = true
+      end
+
+      peak = 0.0_f32
+      count.times do |i|
+        magnitude = samples[i].abs
+        peak = magnitude if magnitude > peak
+      end
+      speech = peak > VAD_SPEECH_CUTOFF
+
+      if speech && !state.triggered
+        state.triggered = true
+        emit_vad(on_event, vad, {"event" => "speech_started", "time_ms" => 0.0, "probability" => 1.0})
+      elsif !speech && state.triggered
+        state.triggered = false
+        emit_vad(on_event, vad, {"event" => "speech_ended", "time_ms" => 0.0, "probability" => 0.0})
+      end
+    end
+
+    def vad_free(vad : Int64) : Nil
+      @vad_streams.delete(vad)
     end
 
     # Spec helpers: inspect per-runtime state without going through events.
@@ -403,6 +525,19 @@ module Llamero::Native
       state.diarizer_loaded = true
     end
 
+    # Picks the next scripted utterance for an idle stream: a source-labeled
+    # stream drains its own queue first, then the shared queue.
+    private def next_scripted_utterance(state : StreamState) : String?
+      if source = state.source
+        if queue = @scripted_utterances_by_source[source]?
+          if text = queue.shift?
+            return text
+          end
+        end
+      end
+      @scripted_utterances.shift?
+    end
+
     private def complete_utterance(state : StreamState, text : String, stream : Int64, on_event : JSON::Any ->) : Nil
       end_ms = ms(state.pushed_samples)
       emit_stream(on_event, stream, {
@@ -437,13 +572,13 @@ module Llamero::Native
         file.write_bytes((36 + data_size).to_u32, IO::ByteFormat::LittleEndian)
         file << "WAVE"
         file << "fmt "
-        file.write_bytes(16_u32, IO::ByteFormat::LittleEndian)               # fmt chunk size
-        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                # PCM
-        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                # mono
-        file.write_bytes(SAMPLE_RATE.to_u32, IO::ByteFormat::LittleEndian)   # sample rate
+        file.write_bytes(16_u32, IO::ByteFormat::LittleEndian)                   # fmt chunk size
+        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                    # PCM
+        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                    # mono
+        file.write_bytes(SAMPLE_RATE.to_u32, IO::ByteFormat::LittleEndian)       # sample rate
         file.write_bytes((SAMPLE_RATE * 2).to_u32, IO::ByteFormat::LittleEndian) # byte rate
-        file.write_bytes(2_u16, IO::ByteFormat::LittleEndian)                # block align
-        file.write_bytes(16_u16, IO::ByteFormat::LittleEndian)               # bits per sample
+        file.write_bytes(2_u16, IO::ByteFormat::LittleEndian)                    # block align
+        file.write_bytes(16_u16, IO::ByteFormat::LittleEndian)                   # bits per sample
         file << "data"
         file.write_bytes(data_size.to_u32, IO::ByteFormat::LittleEndian)
         sample_count.times { file.write_bytes(0_i16, IO::ByteFormat::LittleEndian) }
@@ -456,6 +591,10 @@ module Llamero::Native
 
     private def emit_stream(on_event : JSON::Any ->, stream : Int64, payload) : Nil
       emit_frame(on_event, "mock-audio-stream-#{stream}", payload)
+    end
+
+    private def emit_vad(on_event : JSON::Any ->, vad : Int64, payload) : Nil
+      emit_frame(on_event, "mock-audio-vad-#{vad}", payload)
     end
 
     private def emit_frame(on_event : JSON::Any ->, session_id : String, payload) : Nil

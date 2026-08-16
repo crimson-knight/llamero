@@ -1,4 +1,5 @@
 require "json"
+require "base64"
 require "./errors"
 
 module Llamero::Native
@@ -78,22 +79,29 @@ module Llamero::Native
     # frames surface as UnknownAudioEvent so callers can log and keep going.
     def self.from_bridge_json(raw : JSON::Any) : AudioEvent
       case raw["event"]?.try(&.as_s)
-      when "asr_model_load_started"  then AsrModelLoadStartedEvent.new(raw)
-      when "asr_model_load_progress" then AsrModelLoadProgressEvent.new(raw)
-      when "asr_model_loaded"        then AsrModelLoadedEvent.new(raw)
+      when "asr_model_load_started"       then AsrModelLoadStartedEvent.new(raw)
+      when "asr_model_load_progress"      then AsrModelLoadProgressEvent.new(raw)
+      when "asr_model_loaded"             then AsrModelLoadedEvent.new(raw)
       when "diarizer_model_load_started"  then DiarizerModelLoadStartedEvent.new(raw)
       when "diarizer_model_load_progress" then DiarizerModelLoadProgressEvent.new(raw)
       when "diarizer_model_loaded"        then DiarizerModelLoadedEvent.new(raw)
       when "diarization_progress"         then DiarizationProgressEvent.new(raw)
-      when "tts_model_load_started"  then TtsModelLoadStartedEvent.new(raw)
-      when "tts_model_loaded"        then TtsModelLoadedEvent.new(raw)
-      when "transcript_partial"      then TranscriptPartialEvent.new(raw)
-      when "utterance_end"           then UtteranceEndEvent.new(raw)
-      when "transcript_final"        then TranscriptFinalEvent.new(raw)
-      when "diarized_transcript_final" then DiarizedTranscriptFinalEvent.new(raw)
-      when "speak_completed"         then SpeakCompletedEvent.new(raw)
-      when "error"                   then AudioErrorEvent.new(raw)
-      else                                UnknownAudioEvent.new(raw)
+      when "tts_model_load_started"       then TtsModelLoadStartedEvent.new(raw)
+      when "tts_model_loaded"             then TtsModelLoadedEvent.new(raw)
+      when "transcript_partial"           then TranscriptPartialEvent.new(raw)
+      when "utterance_end"                then UtteranceEndEvent.new(raw)
+      when "transcript_final"             then TranscriptFinalEvent.new(raw)
+      when "diarized_transcript_final"    then DiarizedTranscriptFinalEvent.new(raw)
+      when "speak_completed"              then SpeakCompletedEvent.new(raw)
+      when "speech_chunk"                 then SpeechChunkEvent.new(raw)
+      when "speech_cancelled"             then SpeechCancelledEvent.new(raw)
+      when "vad_model_load_started"       then VadModelLoadStartedEvent.new(raw)
+      when "vad_model_load_progress"      then VadModelLoadProgressEvent.new(raw)
+      when "vad_model_loaded"             then VadModelLoadedEvent.new(raw)
+      when "speech_started"               then SpeechStartedEvent.new(raw)
+      when "speech_ended"                 then SpeechEndedEvent.new(raw)
+      when "error"                        then AudioErrorEvent.new(raw)
+      else                                     UnknownAudioEvent.new(raw)
       end
     end
 
@@ -295,6 +303,99 @@ module Llamero::Native
       @duration_ms = raw["duration_ms"]?.try(&.as_f) || 0.0
       @synthesis_time_ms = raw["synthesis_time_ms"]?.try(&.as_f) || 0.0
       @sample_rate = raw["sample_rate"]?.try(&.as_i) || 0
+    end
+  end
+
+  # One synthesized sentence of a STREAMING text-to-speech call: raw PCM ready
+  # to play, emitted the instant that sentence finishes so the app can start
+  # playback while later sentences are still synthesizing (low time-to-first-
+  # audio). `pcm` is little-endian 16-bit mono at `sample_rate`. `final?` marks
+  # the last chunk.
+  struct SpeechChunkEvent < AudioEvent
+    getter chunk_index : Int32
+    getter sample_rate : Int32
+    getter duration_ms : Float64
+    @pcm_base64 : String
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @chunk_index = raw["chunk_index"]?.try(&.as_i) || 0
+      @sample_rate = raw["sample_rate"]?.try(&.as_i) || 24_000
+      @duration_ms = raw["duration_ms"]?.try(&.as_f) || 0.0
+      @pcm_base64 = raw["pcm_base64"]?.try(&.as_s) || ""
+      @final = raw["is_final"]?.try(&.as_bool) || false
+    end
+
+    # The decoded PCM bytes (little-endian 16-bit mono) for this sentence.
+    def pcm : Bytes
+      Base64.decode(@pcm_base64)
+    end
+
+    def final? : Bool
+      @final
+    end
+  end
+
+  # A streaming text-to-speech call was cancelled (barge-in) before it finished.
+  # `chunk_index` is the sentence it stopped at; `duration_ms` is how much audio
+  # was produced before stopping.
+  struct SpeechCancelledEvent < AudioEvent
+    getter chunk_index : Int32
+    getter duration_ms : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @chunk_index = raw["chunk_index"]?.try(&.as_i) || 0
+      @duration_ms = raw["duration_ms"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # The Silero VAD model started loading (first push on a VAD stream).
+  struct VadModelLoadStartedEvent < AudioEvent
+  end
+
+  # Download/compile progress while the VAD model loads (0.0 to 1.0).
+  struct VadModelLoadProgressEvent < AudioEvent
+    getter progress : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @progress = raw["progress"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # The Silero VAD model is resident and ready.
+  struct VadModelLoadedEvent < AudioEvent
+    getter load_time_ms : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @load_time_ms = raw["load_time_ms"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # Voice activity started: the user began speaking. `time_ms` is the stream
+  # offset of the speech onset; `probability` is the model's speech score.
+  struct SpeechStartedEvent < AudioEvent
+    getter time_ms : Float64
+    getter probability : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @time_ms = raw["time_ms"]?.try(&.as_f) || 0.0
+      @probability = raw["probability"]?.try(&.as_f) || 0.0
+    end
+  end
+
+  # Voice activity ended: sustained silence confirmed the speaker stopped.
+  struct SpeechEndedEvent < AudioEvent
+    getter time_ms : Float64
+    getter probability : Float64
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @time_ms = raw["time_ms"]?.try(&.as_f) || 0.0
+      @probability = raw["probability"]?.try(&.as_f) || 0.0
     end
   end
 

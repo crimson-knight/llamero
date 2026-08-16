@@ -1,6 +1,7 @@
 require "json"
 require "./audio_bridge"
 require "./audio_events"
+require "./transcript_journal"
 require "./errors"
 
 module Llamero::Native
@@ -11,8 +12,12 @@ module Llamero::Native
     getter text : String
     getter start_ms : Float64?
     getter end_ms : Float64?
+    # Which captured source produced this utterance when the stream was opened
+    # with a `source:` label (e.g. "mic", "system"); nil for unlabeled streams.
+    getter source : String?
 
-    def initialize(@text : String, @start_ms : Float64? = nil, @end_ms : Float64? = nil)
+    def initialize(@text : String, @start_ms : Float64? = nil, @end_ms : Float64? = nil,
+                   @source : String? = nil)
     end
   end
 
@@ -25,13 +30,13 @@ module Llamero::Native
   # Created via `AudioRuntime#start_stream`; the streaming models load lazily
   # on the first push (`AsrModelLoad*` events fire on the runtime listeners).
   #
-  # ```crystal
+  # ```
   # audio = Llamero::Native::AudioRuntime.new
   # stream = audio.start_stream
-  # stream.on_partial { |text| print "\r#{text}" }            # live line
+  # stream.on_partial { |text| print "\r#{text}" }             # live line
   # stream.on_utterance { |utterance| handle(utterance.text) } # completed phrases
   #
-  # while samples = capture.next_chunk          # Slice(Float32), 16kHz mono
+  # while samples = capture.next_chunk # Slice(Float32), 16kHz mono
   #   stream.push(samples)
   # end
   #
@@ -54,6 +59,9 @@ module Llamero::Native
     getter chunk_ms : Int32
     # Minimum sustained silence (ms) before an end of utterance is confirmed.
     getter eou_debounce_ms : Int32
+    # Capture-source label stamped onto every utterance from this stream
+    # (e.g. "mic", "system"); nil for unlabeled streams.
+    getter source : String?
 
     # :nodoc: Use `AudioRuntime#start_stream`.
     def initialize(
@@ -61,7 +69,9 @@ module Llamero::Native
       @bridge : AudioBridge,
       @handle : Int64,
       @chunk_ms : Int32,
-      @eou_debounce_ms : Int32
+      @eou_debounce_ms : Int32,
+      @source : String? = nil,
+      @journal : TranscriptJournal? = nil,
     )
       @partial_listeners = [] of String ->
       @utterance_listeners = [] of Utterance ->
@@ -145,12 +155,14 @@ module Llamero::Native
     end
 
     # Releases the bridge-side stream without flushing. Idempotent; called
-    # automatically by `finish` and by `AudioRuntime#close`.
+    # automatically by `finish` and by `AudioRuntime#close`. Also closes the
+    # transcript journal (if any), flushing it to disk.
     def close : Nil
       return if @closed
       @closed = true
       @finished = true
       @bridge.stream_free(@handle)
+      @journal.try(&.close)
     end
 
     # Fans the frame out to the runtime's typed-event listeners, then to the
@@ -162,7 +174,10 @@ module Llamero::Native
         text = event.text
         @partial_listeners.each(&.call(text))
       when UtteranceEndEvent
-        utterance = Utterance.new(text: event.text, start_ms: event.start_ms, end_ms: event.end_ms)
+        utterance = Utterance.new(text: event.text, start_ms: event.start_ms, end_ms: event.end_ms, source: @source)
+        # Persist BEFORE firing listeners: a listener that raises (or a crash
+        # inside one) must not lose a confirmed utterance.
+        @journal.try(&.append(utterance))
         @utterance_listeners.each(&.call(utterance))
       end
       event

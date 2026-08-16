@@ -30,8 +30,18 @@ module Llamero
     property content : String
     property name : String?           # For tool results, the function name
     property tool_call_id : String?   # For tool results, reference to the tool call
+    # Local image attachments are encoded explicitly by the native bridge.
+    # Cloud request builders retain their existing text-only message contract.
+    @[JSON::Field(ignore: true)]
+    property images : Array(Path) = [] of Path
 
-    def initialize(@role : MessageRole, @content : String, @name : String? = nil, @tool_call_id : String? = nil)
+    def initialize(
+      @role : MessageRole,
+      @content : String,
+      @name : String? = nil,
+      @tool_call_id : String? = nil,
+      @images : Array(Path) = [] of Path,
+    )
     end
 
     # Convenience constructors
@@ -39,8 +49,8 @@ module Llamero
       new(MessageRole::System, content)
     end
 
-    def self.user(content : String) : Message
-      new(MessageRole::User, content)
+    def self.user(content : String, images : Array(Path) = [] of Path) : Message
+      new(MessageRole::User, content, images: images)
     end
 
     def self.assistant(content : String) : Message

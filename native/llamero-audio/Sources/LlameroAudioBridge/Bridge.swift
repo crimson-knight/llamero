@@ -77,10 +77,49 @@ struct SpeakRequest: Codable {
     var text: String
     var voice: String?
     var outputPath: String?
+    /// When true, emit one `speech_chunk` (base64 int16 PCM) per sentence as it
+    /// is synthesized — low time-to-first-audio for conversational playback —
+    /// then `speak_completed`. When false/absent, the whole utterance is
+    /// synthesized to one WAV (the original behavior).
+    var stream: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case text, voice
+        case text, voice, stream
         case outputPath = "output_path"
+    }
+}
+
+struct VadStreamConfig: Codable {
+    /// Silero speech probability threshold (0..1). Default 0.85.
+    var threshold: Float?
+    /// Sustained silence (ms) before a speech_ended is emitted. Default 750.
+    var minSilenceMs: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case threshold
+        case minSilenceMs = "min_silence_ms"
+    }
+}
+
+/// Voice-activity-detection stream: the app pushes 16kHz mono Float32, the box
+/// buffers it into Silero's 4096-sample windows and emits speech_started /
+/// speech_ended. Used for barge-in (interrupt the assistant when the user
+/// starts talking) and silence gating.
+final class VadStreamBox: @unchecked Sendable {
+    let runtimeHandle: Int64
+    let threshold: Float
+    let minSilenceMs: Int
+
+    // Touched only from the serialized push FFI calls.
+    var manager: VadManager?
+    var state: VadStreamState = .initial()
+    var buffer: [Float] = []
+    var finished = false
+
+    init(runtimeHandle: Int64, threshold: Float, minSilenceMs: Int) {
+        self.runtimeHandle = runtimeHandle
+        self.threshold = threshold
+        self.minSilenceMs = minSilenceMs
     }
 }
 
@@ -151,6 +190,31 @@ final class AudioRuntimeBox: @unchecked Sendable {
         if eouManagerCache[key] == nil {
             eouManagerCache[key] = manager
         }
+    }
+
+    // Barge-in: a streaming `speak` checks this between sentence chunks and
+    // stops if set. The flag is set by `llamero_audio_speak_cancel` (callable
+    // from the app's capture/VAD thread) and cleared at the start of each
+    // speak.
+    private let speakCancelLock = NSLock()
+    private var _speakCancelled = false
+
+    func requestSpeakCancel() {
+        speakCancelLock.lock()
+        defer { speakCancelLock.unlock() }
+        _speakCancelled = true
+    }
+
+    func resetSpeakCancel() {
+        speakCancelLock.lock()
+        defer { speakCancelLock.unlock() }
+        _speakCancelled = false
+    }
+
+    var speakCancelled: Bool {
+        speakCancelLock.lock()
+        defer { speakCancelLock.unlock() }
+        return _speakCancelled
     }
 }
 
@@ -231,6 +295,7 @@ final class AudioBridgeRegistry: @unchecked Sendable {
     private var nextHandle: Int64 = 1
     private var runtimes: [Int64: AudioRuntimeBox] = [:]
     private var streams: [Int64: AudioStreamBox] = [:]
+    private var vadStreams: [Int64: VadStreamBox] = [:]
 
     func addRuntime(_ runtime: AudioRuntimeBox) -> Int64 {
         lock.lock(); defer { lock.unlock() }
@@ -250,6 +315,25 @@ final class AudioBridgeRegistry: @unchecked Sendable {
         runtimes[handle] = nil
         // Streams cannot outlive their parent runtime.
         streams = streams.filter { $0.value.runtimeHandle != handle }
+        vadStreams = vadStreams.filter { $0.value.runtimeHandle != handle }
+    }
+
+    func addVadStream(_ vad: VadStreamBox) -> Int64 {
+        lock.lock(); defer { lock.unlock() }
+        let handle = nextHandle
+        nextHandle += 1
+        vadStreams[handle] = vad
+        return handle
+    }
+
+    func vadStream(_ handle: Int64) -> VadStreamBox? {
+        lock.lock(); defer { lock.unlock() }
+        return vadStreams[handle]
+    }
+
+    func removeVadStream(_ handle: Int64) -> VadStreamBox? {
+        lock.lock(); defer { lock.unlock() }
+        return vadStreams.removeValue(forKey: handle)
     }
 
     func addStream(_ stream: AudioStreamBox) -> Int64 {
@@ -914,6 +998,37 @@ func sentenceChunks(_ text: String, maxLength: Int) -> [String] {
     return chunks.isEmpty ? [text] : chunks
 }
 
+/// One chunk PER SENTENCE (sub-splitting only an oversized sentence) — the
+/// finer granularity streaming TTS needs. `sentenceChunks` deliberately PACKS
+/// sentences up to `maxLength` to minimize Kokoro calls, which would make a
+/// short reply one chunk and defeat streaming; this keeps each sentence
+/// separate so playback of sentence one starts while sentence two synthesizes.
+func streamingChunks(_ text: String, maxLength: Int) -> [String] {
+    var sentences: [String] = []
+    var sentence = ""
+    for character in text {
+        sentence.append(character)
+        if character == "." || character == "!" || character == "?" || character == "\n" {
+            let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { sentences.append(trimmed) }
+            sentence = ""
+        }
+    }
+    let tail = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !tail.isEmpty { sentences.append(tail) }
+
+    var chunks: [String] = []
+    for piece in sentences {
+        if piece.count > maxLength {
+            // Oversized sentence: fall back to the word-wrapping splitter.
+            chunks.append(contentsOf: sentenceChunks(piece, maxLength: maxLength))
+        } else {
+            chunks.append(piece)
+        }
+    }
+    return chunks.isEmpty ? [text] : chunks
+}
+
 @_cdecl("llamero_audio_speak")
 public func llamero_audio_speak(
     _ handle: Int64,
@@ -940,17 +1055,46 @@ public func llamero_audio_speak(
             // Kokoro rejects long inputs (phonemeSequenceTooLong), so
             // synthesize sentence chunks and concatenate the samples.
             let voice = request.voice ?? runtime.config.ttsVoice
-            let chunks = sentenceChunks(request.text, maxLength: 300)
+            let streaming = request.stream ?? false
+            // Streaming wants one sentence per chunk (low TTFA); non-streaming
+            // packs sentences to minimize Kokoro calls.
+            let chunks =
+                streaming
+                ? streamingChunks(request.text, maxLength: 300)
+                : sentenceChunks(request.text, maxLength: 300)
+            runtime.resetSpeakCancel()
 
             let start = Date()
             var samples: [Float] = []
             var sampleRate = 24000
             var durationSeconds = 0.0
-            for chunk in chunks {
+            for (index, chunk) in chunks.enumerated() {
+                // Barge-in: stop before synthesizing the next sentence.
+                if streaming && runtime.speakCancelled {
+                    sink.emit([
+                        "event": "speech_cancelled",
+                        "chunk_index": index,
+                        "duration_ms": durationSeconds * 1000,
+                    ])
+                    sink.finish()
+                    return
+                }
                 let result = try await tts.synthesizeDetailed(text: chunk, voice: voice)
                 samples.append(contentsOf: result.samples)
                 sampleRate = result.sampleRate
                 durationSeconds += result.durationSeconds
+                if streaming {
+                    // Emit this sentence's PCM immediately so the app can play
+                    // it while the next sentence synthesizes (low TTFA).
+                    sink.emit([
+                        "event": "speech_chunk",
+                        "chunk_index": index,
+                        "pcm_base64": pcmInt16Base64(result.samples),
+                        "sample_rate": result.sampleRate,
+                        "duration_ms": result.durationSeconds * 1000,
+                        "is_final": index == chunks.count - 1,
+                    ])
+                }
             }
             let wav = try AudioWAV.data(
                 from: samples, sampleRate: Double(sampleRate))
@@ -981,6 +1125,140 @@ public func llamero_audio_speak(
     }
 
     return sink.drain(callback: callback, userData: userData)
+}
+
+/// Requests cancellation of an in-flight streaming `speak` on a runtime
+/// (barge-in). Safe to call from any thread — e.g. the app's capture/VAD
+/// thread when it detects the user has started speaking. The streaming speak
+/// stops before its next sentence and emits `speech_cancelled`.
+@_cdecl("llamero_audio_speak_cancel")
+public func llamero_audio_speak_cancel(_ handle: Int64) {
+    AudioBridgeRegistry.shared.runtime(handle)?.requestSpeakCancel()
+}
+
+/// Encodes Float samples (±1.0) as base64 little-endian 16-bit PCM for
+/// transport in a `speech_chunk` event.
+private func pcmInt16Base64(_ samples: [Float]) -> String {
+    var data = Data(capacity: samples.count * 2)
+    for sample in samples {
+        let clamped = max(-1.0, min(1.0, sample))
+        let value = Int16(clamped * 32767.0)
+        withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+    }
+    return data.base64EncodedString()
+}
+
+// MARK: - Voice activity detection (VAD)
+
+/// Loads the Silero VAD model on a VAD stream's first push (download on first
+/// ever use), emitting vad_model_load_* events.
+private func ensureVadManager(_ box: VadStreamBox, sink: EventSink) async throws -> VadManager {
+    if let manager = box.manager {
+        return manager
+    }
+    guard AudioBridgeRegistry.shared.runtime(box.runtimeHandle) != nil else {
+        throw AudioBridgeError(message: "Parent audio runtime was freed")
+    }
+    sink.emit(["event": "vad_model_load_started"])
+    let start = Date()
+    let throttle = ProgressThrottle()
+    let manager = try await VadManager(
+        config: VadConfig(defaultThreshold: box.threshold),
+        progressHandler: { progress in
+            if throttle.shouldReport(progress.fractionCompleted) {
+                sink.emit([
+                    "event": "vad_model_load_progress",
+                    "progress": progress.fractionCompleted,
+                ])
+            }
+        }
+    )
+    sink.emit([
+        "event": "vad_model_loaded",
+        "load_time_ms": Date().timeIntervalSince(start) * 1000,
+    ])
+    box.manager = manager
+    return manager
+}
+
+/// Creates a VAD stream on a runtime. Config JSON (all optional):
+/// {"threshold": 0.85, "min_silence_ms": 750}. Returns a positive handle or a
+/// negative status (-1 unknown runtime). The Silero model loads on first push.
+@_cdecl("llamero_audio_vad_create")
+public func llamero_audio_vad_create(
+    _ runtimeHandle: Int64, _ configJson: UnsafePointer<CChar>?
+) -> Int64 {
+    guard AudioBridgeRegistry.shared.runtime(runtimeHandle) != nil else { return -1 }
+    var threshold: Float = 0.85
+    var minSilenceMs = 750
+    if let configJson, let data = String(cString: configJson).data(using: .utf8),
+        let cfg = try? JSONDecoder().decode(VadStreamConfig.self, from: data)
+    {
+        if let value = cfg.threshold { threshold = value }
+        if let value = cfg.minSilenceMs { minSilenceMs = value }
+    }
+    let box = VadStreamBox(
+        runtimeHandle: runtimeHandle, threshold: threshold, minSilenceMs: minSilenceMs)
+    return AudioBridgeRegistry.shared.addVadStream(box)
+}
+
+/// Pushes 16kHz mono Float32 PCM into a VAD stream, emitting speech_started /
+/// speech_ended frames as Silero's hysteresis state machine transitions.
+@_cdecl("llamero_audio_vad_push")
+public func llamero_audio_vad_push(
+    _ handle: Int64,
+    _ samples: UnsafePointer<Float>?,
+    _ count: Int32,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let box = AudioBridgeRegistry.shared.vadStream(handle) else { return 2 }
+    guard !box.finished else { return 4 }
+    guard let samples, count >= 0 else { return 3 }
+    guard count > 0 else { return 0 }
+
+    let pushed = Array(UnsafeBufferPointer(start: samples, count: Int(count)))
+    let sink = EventSink(sessionId: "audio-vad-\(handle)")
+
+    Task.detached {
+        do {
+            let manager = try await ensureVadManager(box, sink: sink)
+            let segConfig = VadSegmentationConfig(
+                minSilenceDuration: Double(box.minSilenceMs) / 1000.0)
+
+            box.buffer.append(contentsOf: pushed)
+            let window = VadManager.chunkSize
+            while box.buffer.count >= window {
+                let chunk = Array(box.buffer.prefix(window))
+                box.buffer.removeFirst(window)
+                let result = try await manager.processStreamingChunk(
+                    chunk, state: box.state, config: segConfig, returnSeconds: false)
+                box.state = result.state
+                if let event = result.event {
+                    sink.emit([
+                        "event": event.isStart ? "speech_started" : "speech_ended",
+                        "time_ms": Double(event.sampleIndex) * 1000.0 / 16000.0,
+                        "probability": result.probability,
+                    ])
+                }
+            }
+            sink.finish()
+        } catch {
+            sink.fail(
+                message: "Voice activity detection failed: \(error)",
+                code: "vad_failed", recoverable: true)
+        }
+    }
+
+    return sink.drain(callback: callback, userData: userData)
+}
+
+/// Releases a VAD stream handle.
+@_cdecl("llamero_audio_vad_free")
+public func llamero_audio_vad_free(_ handle: Int64) {
+    guard let box = AudioBridgeRegistry.shared.removeVadStream(handle) else { return }
+    box.finished = true
+    box.manager = nil
 }
 
 // MARK: - Streaming STT helpers

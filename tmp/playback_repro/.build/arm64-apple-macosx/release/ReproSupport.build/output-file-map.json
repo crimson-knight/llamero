@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/ReproSupport.d",
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/ReproSupport.o",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/primary.swiftdeps"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/Sources/ReproSupport/PlaybackProbe.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/PlaybackProbe.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/PlaybackProbe~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/PlaybackProbe.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/ReproSupport.build/PlaybackProbe.dia"
+  }
+}

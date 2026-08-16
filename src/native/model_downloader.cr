@@ -34,7 +34,10 @@ module Llamero::Native
       /^tokenizer\.json$/,
       /^tokenizer\.model$/,
       /^tokenizer_config\.json$/,
+      /^added_tokens\.json$/,
       /^special_tokens_map\.json$/,
+      /^preprocessor_config\.json$/,
+      /^processor_config\.json$/,
       /^vocab\.json$/,
       /^merges\.txt$/,
       /^chat_template\.(jinja|json)$/,
@@ -70,7 +73,8 @@ module Llamero::Native
     end
 
     def cached?(model_id : String) : Bool
-      File.exists?(model_dir(model_id).join(COMPLETE_MARKER))
+      dir = model_dir(model_id)
+      File.exists?(dir.join(COMPLETE_MARKER)) && vision_processor_ready?(dir)
     end
 
     # Returns the local directory for the model, downloading it first when
@@ -102,7 +106,14 @@ module Llamero::Native
       done_bytes = 0_i64
 
       wanted.each do |file|
-        download_file(repo_id, revision, file.name, dir.join(file.name)) do |chunk_bytes|
+        destination = dir.join(file.name)
+        if file.size > 0 && File.exists?(destination) && File.size(destination) == file.size
+          done_bytes += file.size
+          progress.call(total_bytes > 0 ? done_bytes.to_f / total_bytes : 0.0)
+          next
+        end
+
+        download_file(repo_id, revision, file.name, destination) do |chunk_bytes|
           done_bytes += chunk_bytes
           progress.call(total_bytes > 0 ? done_bytes.to_f / total_bytes : 0.0)
         end
@@ -118,6 +129,22 @@ module Llamero::Native
     end
 
     private record ModelFile, name : String, size : Int64
+
+    # A text-only cache marker predating VLM support is incomplete when its
+    # config includes a vision tower but no image processor metadata. Returning
+    # false makes resolve fetch only the newly required small JSON files; files
+    # whose on-disk size matches the Hub listing are preserved above.
+    private def vision_processor_ready?(dir : Path) : Bool
+      config_path = dir.join("config.json")
+      return true unless File.exists?(config_path)
+      config = JSON.parse(File.read(config_path)).as_h? || return true
+      return true unless config.has_key?("vision_config")
+
+      File.exists?(dir.join("preprocessor_config.json")) ||
+        File.exists?(dir.join("processor_config.json"))
+    rescue JSON::ParseException
+      false
+    end
 
     # Restores text_config fields the 4-bit converter drops from multimodal
     # Gemma 3 checkpoints (it omits values equal to transformers class

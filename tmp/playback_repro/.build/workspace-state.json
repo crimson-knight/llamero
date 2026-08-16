@@ -1,0 +1,27 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "fluidaudio",
+          "kind" : "fileSystem",
+          "location" : "/Users/crimsonknight/open_source_coding_projects/FluidAudio",
+          "name" : "FluidAudio"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/Users/crimsonknight/open_source_coding_projects/FluidAudio"
+        },
+        "subpath" : "fluidaudio"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

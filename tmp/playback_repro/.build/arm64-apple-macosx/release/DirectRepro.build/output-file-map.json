@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/DirectRepro.d",
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/DirectRepro.o",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/primary.swiftdeps"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/Sources/DirectRepro/main.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/main.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/main.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/DirectRepro.build/main.dia"
+  }
+}

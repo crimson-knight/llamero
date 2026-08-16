@@ -56,6 +56,11 @@ module Llamero::Native
     # optional, "output_path": optional}.
     abstract def speak(runtime : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
 
+    # Requests cancellation of an in-flight STREAMING speak on a runtime
+    # (barge-in). The streaming speak stops before its next sentence and emits
+    # a speech_cancelled frame. No-op when nothing is speaking.
+    abstract def cancel_speak(runtime : Int64) : Nil
+
     # Creates a streaming speech-to-text session on a runtime and returns an
     # opaque stream handle. Config JSON (all keys optional):
     # {"chunk_ms": 160|320|1280, "eou_debounce_ms": 1280}. Nothing heavy is
@@ -77,6 +82,18 @@ module Llamero::Native
 
     # Releases a stream handle (idempotent on the bridge side).
     abstract def stream_free(stream : Int64) : Nil
+
+    # Creates a voice-activity-detection stream on a runtime. Config JSON (all
+    # optional): {"threshold": 0.85, "min_silence_ms": 750}. The Silero model
+    # loads lazily on the first push.
+    abstract def vad_create(runtime : Int64, config_json : String) : Int64
+
+    # Pushes 16kHz mono Float32 PCM into a VAD stream, yielding speech_started
+    # and speech_ended frames (plus vad_model_load_* on first use).
+    abstract def vad_push(vad : Int64, samples : Pointer(Float32), count : Int32, &on_event : JSON::Any ->) : Nil
+
+    # Releases a VAD stream handle.
+    abstract def vad_free(vad : Int64) : Nil
   end
 
   # FFI binding to the Swift audio bridge dylib (libLlameroAudioBridge.dylib,
@@ -120,10 +137,14 @@ module Llamero::Native
     @transcribe_file : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
     @transcribe_diarized_file : Proc(Int64, LibC::Char*, LibC::Char*, Void*, Void*, Int32)
     @speak : Proc(Int64, LibC::Char*, Void*, Void*, Int32)
+    @speak_cancel : Proc(Int64, Nil)
     @stream_create : Proc(Int64, LibC::Char*, Int64)
     @stream_push : Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32)
     @stream_finish : Proc(Int64, Void*, Void*, Int32)
     @stream_free : Proc(Int64, Nil)
+    @vad_create : Proc(Int64, LibC::Char*, Int64)
+    @vad_push : Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32)
+    @vad_free : Proc(Int64, Nil)
 
     # Locates the bridge dylib. Search order:
     # 1. LLAMERO_AUDIO_LIB environment variable
@@ -174,10 +195,14 @@ module Llamero::Native
       @transcribe_file = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_transcribe_file"), Pointer(Void).null)
       @transcribe_diarized_file = Proc(Int64, LibC::Char*, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_runtime_transcribe_diarized"), Pointer(Void).null)
       @speak = Proc(Int64, LibC::Char*, Void*, Void*, Int32).new(symbol("llamero_audio_speak"), Pointer(Void).null)
+      @speak_cancel = Proc(Int64, Nil).new(symbol("llamero_audio_speak_cancel"), Pointer(Void).null)
       @stream_create = Proc(Int64, LibC::Char*, Int64).new(symbol("llamero_audio_stream_create"), Pointer(Void).null)
       @stream_push = Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32).new(symbol("llamero_audio_stream_push"), Pointer(Void).null)
       @stream_finish = Proc(Int64, Void*, Void*, Int32).new(symbol("llamero_audio_stream_finish"), Pointer(Void).null)
       @stream_free = Proc(Int64, Nil).new(symbol("llamero_audio_stream_free"), Pointer(Void).null)
+      @vad_create = Proc(Int64, LibC::Char*, Int64).new(symbol("llamero_audio_vad_create"), Pointer(Void).null)
+      @vad_push = Proc(Int64, Pointer(Float32), Int32, Void*, Void*, Int32).new(symbol("llamero_audio_vad_push"), Pointer(Void).null)
+      @vad_free = Proc(Int64, Nil).new(symbol("llamero_audio_vad_free"), Pointer(Void).null)
     end
 
     def name : String
@@ -218,6 +243,10 @@ module Llamero::Native
       end
     end
 
+    def cancel_speak(runtime : Int64) : Nil
+      @speak_cancel.call(runtime)
+    end
+
     def stream_create(runtime : Int64, config_json : String) : Int64
       handle = @stream_create.call(runtime, config_json.to_unsafe)
       if handle <= 0
@@ -240,6 +269,24 @@ module Llamero::Native
 
     def stream_free(stream : Int64) : Nil
       @stream_free.call(stream)
+    end
+
+    def vad_create(runtime : Int64, config_json : String) : Int64
+      handle = @vad_create.call(runtime, config_json.to_unsafe)
+      if handle <= 0
+        raise NativeError.new("Audio bridge failed to create VAD stream (status #{handle})", "vad_create_failed")
+      end
+      handle
+    end
+
+    def vad_push(vad : Int64, samples : Pointer(Float32), count : Int32, &on_event : JSON::Any ->) : Nil
+      with_events(on_event) do |callback, user_data|
+        @vad_push.call(vad, samples, count, callback, user_data)
+      end
+    end
+
+    def vad_free(vad : Int64) : Nil
+      @vad_free.call(vad)
     end
 
     # Wraps a C call that streams event frames. Listener exceptions are

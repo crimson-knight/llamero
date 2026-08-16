@@ -163,6 +163,15 @@ module Llamero::Native
       })
     end
 
+    def generate_vision_path(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
+      generate(session, request_json) { |event| on_event.call(event) }
+    end
+
+    def generate_vision_bytes(session : Int64, request_json : String, image_bytes : Bytes, &on_event : JSON::Any ->) : Nil
+      raise ArgumentError.new("image_bytes cannot be empty") if image_bytes.empty?
+      generate(session, request_json) { |event| on_event.call(event) }
+    end
+
     def train_adapter(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
       state = session_state(session)
 

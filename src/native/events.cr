@@ -246,6 +246,8 @@ module Llamero::Native
       when "adapter_activation_failed" then AdapterActivationError.new(@message, base_model_loaded: @base_model_loaded)
       when "adapter_training_failed"   then AdapterTrainingError.new(@message, base_model_loaded: @base_model_loaded)
       when "generation_failed"     then GenerationError.new(@message, base_model_loaded: @base_model_loaded)
+      when "vision_not_supported", "image_load_failed"
+        GenerationError.new(@message, code: @code, base_model_loaded: @base_model_loaded)
       else
         NativeError.new(@message, @code, @recoverable, @base_model_loaded)
       end

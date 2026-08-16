@@ -65,6 +65,14 @@ module Llamero::Native
     # calling fiber until generation finishes.
     abstract def generate(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
 
+    # Generates with one or more image paths carried by messages[].images.
+    # Kept separate so a runtime can feature-detect the additive vision ABI.
+    abstract def generate_vision_path(session : Int64, request_json : String, &on_event : JSON::Any ->) : Nil
+
+    # Generates with one encoded in-memory image (for example webcam JPEG
+    # bytes). Implementations must copy the bytes before returning.
+    abstract def generate_vision_bytes(session : Int64, request_json : String, image_bytes : Bytes, &on_event : JSON::Any ->) : Nil
+
     # Trains a LoRA/DoRA adapter on the resident model, yielding event frames
     # (training_progress / training_validation, then training_completed with
     # the artifact path, or error). The bridge must restore the base model's

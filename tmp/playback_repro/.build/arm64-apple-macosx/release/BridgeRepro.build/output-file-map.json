@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/BridgeRepro.d",
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/BridgeRepro.o",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/primary.swiftdeps"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/Sources/BridgeRepro/main.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/main.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/main.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/BridgeRepro.build/main.dia"
+  }
+}

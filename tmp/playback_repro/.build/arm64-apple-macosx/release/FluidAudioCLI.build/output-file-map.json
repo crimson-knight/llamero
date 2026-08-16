@@ -1,0 +1,349 @@
+{
+  "": {
+    "dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FluidAudioCLI.d",
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FluidAudioCLI.o",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/primary.swiftdeps"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Cohere/CohereBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Cohere/CohereTranscribeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereTranscribeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereTranscribeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereTranscribeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CohereTranscribeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/CtcZhCnBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/CtcZhCnTranscribeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnTranscribeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnTranscribeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnTranscribeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcZhCnTranscribeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/JapaneseAsrBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseAsrBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseAsrBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseAsrBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseAsrBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/ParaformerTranscribeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParaformerTranscribeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParaformerTranscribeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParaformerTranscribeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParaformerTranscribeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/AsrBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/AsrBenchmarkTypes.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmarkTypes.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmarkTypes~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmarkTypes.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AsrBenchmarkTypes.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/CtcDecodeBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcDecodeBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcDecodeBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcDecodeBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcDecodeBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/CtcEarningsBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcEarningsBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcEarningsBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcEarningsBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CtcEarningsBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/EmissionDelayBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/EmissionDelayBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/EmissionDelayBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/EmissionDelayBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/EmissionDelayBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/FleursBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FleursBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FleursBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FleursBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FleursBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/MultiStreamCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultiStreamCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultiStreamCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultiStreamCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultiStreamCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/SlidingWindow/TranscribeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TranscribeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TranscribeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TranscribeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TranscribeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/Streaming/NemotronBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/Streaming/NemotronMultilingualFleursBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualFleursBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualFleursBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualFleursBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualFleursBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/Streaming/NemotronMultilingualMultiStreamBench.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualMultiStreamBench.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualMultiStreamBench~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualMultiStreamBench.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualMultiStreamBench.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/Streaming/NemotronMultilingualTranscribe.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualTranscribe.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualTranscribe~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualTranscribe.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronMultilingualTranscribe.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/Streaming/NemotronTranscribe.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronTranscribe.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronTranscribe~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronTranscribe.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/NemotronTranscribe.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Parakeet/Streaming/ParakeetEouCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParakeetEouCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParakeetEouCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParakeetEouCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ParakeetEouCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Qwen3/Qwen3AsrBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3AsrBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3AsrBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3AsrBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3AsrBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/Qwen3/Qwen3TranscribeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3TranscribeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3TranscribeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3TranscribeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/Qwen3TranscribeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/SenseVoiceBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ASR/SenseVoiceTranscribeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceTranscribeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceTranscribeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceTranscribeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SenseVoiceTranscribeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/DiarizationBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/DiarizationBenchmarkUtils.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmarkUtils.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmarkUtils~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmarkUtils.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationBenchmarkUtils.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/DownloadCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DownloadCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DownloadCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DownloadCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DownloadCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/G2PBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/G2PBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/G2PBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/G2PBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/G2PBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/LSEENDBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/LSEENDCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LSEENDCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/MagpieCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MagpieCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MagpieCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MagpieCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MagpieCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/MinimaxCorpusCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MinimaxCorpusCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MinimaxCorpusCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MinimaxCorpusCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MinimaxCorpusCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/ProcessCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ProcessCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ProcessCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ProcessCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ProcessCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/SortformerBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/SortformerCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/SortformerCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/TTSAsrVerifyCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSAsrVerifyCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSAsrVerifyCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSAsrVerifyCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSAsrVerifyCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/TTSCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TTSCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/TtsBenchmarkCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TtsBenchmarkCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TtsBenchmarkCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TtsBenchmarkCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TtsBenchmarkCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/VadAnalyzeCommand.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadAnalyzeCommand.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadAnalyzeCommand~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadAnalyzeCommand.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadAnalyzeCommand.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Commands/VadBenchmark.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadBenchmark.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadBenchmark~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadBenchmark.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/VadBenchmark.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/DatasetParsers/AMIKaldiData.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIKaldiData.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIKaldiData~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIKaldiData.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIKaldiData.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/DatasetParsers/AMIParser.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIParser.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIParser~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIParser.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/AMIParser.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/DatasetParsers/ChineseDatasetDownloader.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ChineseDatasetDownloader.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ChineseDatasetDownloader~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ChineseDatasetDownloader.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ChineseDatasetDownloader.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/DatasetParsers/DatasetDownloader.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DatasetDownloader.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DatasetDownloader~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DatasetDownloader.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DatasetDownloader.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/DatasetParsers/JapaneseDatasetDownloader.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseDatasetDownloader.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseDatasetDownloader~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseDatasetDownloader.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/JapaneseDatasetDownloader.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/DatasetParsers/MultilingualBenchmarkDataset.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultilingualBenchmarkDataset.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultilingualBenchmarkDataset~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultilingualBenchmarkDataset.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/MultilingualBenchmarkDataset.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/FluidAudioCLI.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FluidAudioCLI.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FluidAudioCLI~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FluidAudioCLI.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/FluidAudioCLI.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Models/CLIModels.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CLIModels.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CLIModels~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CLIModels.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/CLIModels.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/DiarizationMetrics.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationMetrics.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationMetrics~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationMetrics.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DiarizationMetrics.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/InlineDiff.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/InlineDiff.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/InlineDiff~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/InlineDiff.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/InlineDiff.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/LevenshteinDistance.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LevenshteinDistance.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LevenshteinDistance~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LevenshteinDistance.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/LevenshteinDistance.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/RTTMParser.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/RTTMParser.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/RTTMParser~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/RTTMParser.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/RTTMParser.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/ResultsFormatter.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ResultsFormatter.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ResultsFormatter~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ResultsFormatter.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/ResultsFormatter.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/TerminalUI.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TerminalUI.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TerminalUI~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TerminalUI.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TerminalUI.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/TextNormalizer.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TextNormalizer.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TextNormalizer~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TextNormalizer.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/TextNormalizer.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/FluidAudio/Sources/FluidAudioCLI/Utils/WERCalculator.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/WERCalculator.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/WERCalculator~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/WERCalculator.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/WERCalculator.dia"
+  },
+  "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/DerivedSources/resource_bundle_accessor.swift": {
+    "object": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/resource_bundle_accessor.swiftdeps",
+    "diagnostics": "/Users/crimsonknight/open_source_coding_projects/llamero/tmp/playback_repro/.build/arm64-apple-macosx/release/FluidAudioCLI.build/resource_bundle_accessor.dia"
+  }
+}
