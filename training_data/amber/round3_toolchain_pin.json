@@ -18,19 +18,110 @@
     "file": "docs/v2/guides/models/grant/multi-tenancy.md"
   },
   "grant_dependencies": [
-    {"name": "db", "version": "0.14.0", "commit": "9fff44dd1f61446f9aaffafbb50c4118fe92a3dc", "sha256": "4a4dea15c27b985cd9d8c5c545024daafab347b56986252fd24fcc3f18e5c024"},
-    {"name": "mysql", "version": "0.17.0", "commit": "c061324dcef89a200a7a3f86a59b2ebf03f83602", "sha256": "1566e612cc9021f40db16153491d79191b327576f3dd5facaf1e71b37a574dbc"},
-    {"name": "pg", "version": "0.30.0", "commit": "1f4aefd82440cffd6e70ccb02b7d27bfbfc6d25d", "sha256": "0fcacb5e2d717882de0f809b937224338d171e2a7937c97cb5d5b0306c90eff9"},
-    {"name": "sqlite3", "version": "0.23.0", "commit": "271a1314a6c64e6c3d98942a39bf1b3e8326b190", "sha256": "e62db0abc50b1437630a25594e175cb3e6949c21bcf55cebefdc7d3a8425988d"},
-    {"name": "ameba", "version": "1.7.0-dev", "commit": "cdd58b34b0d8a9c785d67183a7a8f07541549e55", "sha256": "18ee1d2c96b1b32707b7e43e37f66b8809ee024927d6ba508f0e56e06a5d9876"}
+    {
+      "name": "db",
+      "version": "0.14.0",
+      "commit": "9fff44dd1f61446f9aaffafbb50c4118fe92a3dc",
+      "sha256": "4a4dea15c27b985cd9d8c5c545024daafab347b56986252fd24fcc3f18e5c024"
+    },
+    {
+      "name": "mysql",
+      "version": "0.17.0",
+      "commit": "c061324dcef89a200a7a3f86a59b2ebf03f83602",
+      "sha256": "1566e612cc9021f40db16153491d79191b327576f3dd5facaf1e71b37a574dbc"
+    },
+    {
+      "name": "pg",
+      "version": "0.30.0",
+      "commit": "1f4aefd82440cffd6e70ccb02b7d27bfbfc6d25d",
+      "sha256": "0fcacb5e2d717882de0f809b937224338d171e2a7937c97cb5d5b0306c90eff9"
+    },
+    {
+      "name": "sqlite3",
+      "version": "0.23.0",
+      "commit": "271a1314a6c64e6c3d98942a39bf1b3e8326b190",
+      "sha256": "e62db0abc50b1437630a25594e175cb3e6949c21bcf55cebefdc7d3a8425988d"
+    },
+    {
+      "name": "ameba",
+      "version": "1.7.0-dev",
+      "commit": "cdd58b34b0d8a9c785d67183a7a8f07541549e55",
+      "sha256": "18ee1d2c96b1b32707b7e43e37f66b8809ee024927d6ba508f0e56e06a5d9876"
+    }
   ],
   "tools": [
-    {"name": "crystal-alpha", "path": "/opt/homebrew/bin/crystal-alpha", "sha256": "9d290608fb7b4e36d8e468d526a45d46bb7a7744ea30cce38408232c3df48ba3", "version_command": ["--version"], "version_prefix": "Crystal 1.21.0 [9c1e8ec64]"},
-    {"name": "shards-alpha", "path": "/opt/homebrew/bin/shards-alpha", "sha256": "58006fe39d6823179e42557f7d8509ae3ec8738313f352a0cabc44d2e76c34d2", "version_command": ["--version"], "version_prefix": "Shards Alpha 2025.11.25.5"},
-    {"name": "python3", "path": "/opt/homebrew/bin/python3", "sha256": "b502cb4c5b46b8d4192ec6bcb600ce8922f1afc396fcf646e8765c6eba74a0bf", "version_command": ["--version"], "version_prefix": "Python 3.14.6"},
-    {"name": "git", "path": "/opt/homebrew/bin/git", "sha256": "8a685463cdb7b0bd80507a3978bd1720a97475c9326c186916b228d55242b450", "version_command": ["--version"], "version_prefix": "git version 2.41.0"},
-    {"name": "tar", "path": "/usr/bin/tar", "sha256": "9ab7f0793033dc9dc4809d83d695118801bd687cbacda59a0cbbf151ba25dc2b", "version_command": ["--version"], "version_prefix": "bsdtar 3.5.3"},
-    {"name": "ruby", "path": "/Users/crimsonknight/.rbenv/versions/3.2.2/bin/ruby", "sha256": "8c3269b7d0a4ad3041ebec51c4558c3759a397f8c817132487f7664b76fd4565", "version_command": ["--version"], "version_prefix": "ruby 3.2.2"}
+    {
+      "name": "crystal-alpha",
+      "path": "/opt/homebrew/bin/crystal-alpha",
+      "sha256": "9d290608fb7b4e36d8e468d526a45d46bb7a7744ea30cce38408232c3df48ba3",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "Crystal 1.21.0 [9c1e8ec64]"
+    },
+    {
+      "name": "shards-alpha",
+      "path": "/opt/homebrew/bin/shards-alpha",
+      "sha256": "58006fe39d6823179e42557f7d8509ae3ec8738313f352a0cabc44d2e76c34d2",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "Shards Alpha 2025.11.25.5"
+    },
+    {
+      "name": "python3",
+      "path": "/opt/homebrew/bin/python3",
+      "sha256": "b502cb4c5b46b8d4192ec6bcb600ce8922f1afc396fcf646e8765c6eba74a0bf",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "Python 3.14.6"
+    },
+    {
+      "name": "git",
+      "path": "/opt/homebrew/bin/git",
+      "sha256": "8a685463cdb7b0bd80507a3978bd1720a97475c9326c186916b228d55242b450",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "git version 2.41.0"
+    },
+    {
+      "name": "tar",
+      "path": "/usr/bin/tar",
+      "sha256": "9ab7f0793033dc9dc4809d83d695118801bd687cbacda59a0cbbf151ba25dc2b",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "bsdtar 3.5.3"
+    },
+    {
+      "name": "ruby",
+      "path": "/Users/crimsonknight/.rbenv/versions/3.2.2/bin/ruby",
+      "sha256": "8c3269b7d0a4ad3041ebec51c4558c3759a397f8c817132487f7664b76fd4565",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "ruby 3.2.2"
+    },
+    {
+      "name": "swift",
+      "path": "/usr/bin/swift",
+      "sha256": "179301dcb41ea78accc3fa0048a7e6f6710d891945a751a34addd622020c1818",
+      "version_command": [
+        "--version"
+      ],
+      "version_prefix": "Apple Swift version 6.3.3"
+    },
+    {
+      "name": "xcodebuild",
+      "path": "/usr/bin/xcodebuild",
+      "sha256": "065de0d338384b483be271b9cc8ef83b019788ec786c985d9dab07d5913ecdbb",
+      "version_command": [
+        "-version"
+      ],
+      "version_prefix": "Xcode 26.6"
+    }
   ],
   "critic": {
     "aed_linter": "/Users/crimsonknight/.claude/plugins/cache/aed-conventions/aed/0.1.2/scripts/aed_lint.rb",
@@ -38,6 +129,15 @@
   },
   "native_mlx_bridge": {
     "path": "/Users/crimsonknight/.llamero/lib/libLlameroMLXBridge.dylib",
-    "sha256": "e5b441102c79ee36024faafd715223ff8db7300830ccf69ded891fe9a167a636"
+    "sha256": "a95fec1df34febb938dc4a41f92e4c520c7defdc165a628c9689279c39ce3db2",
+    "source_file": "native/llamero-mlx/Sources/LlameroMLXBridge/Bridge.swift",
+    "source_sha256": "664054f907c6207a2eae82bc91c14c90e2f03f737398962c5da982bd020dd45f"
+  },
+  "swift_packages": {
+    "manifest": "native/llamero-mlx/Package.swift",
+    "manifest_sha256": "07870910463cf880a9de793911ea723ee77bd7de61b7c1a3f88e2b19b10d0882",
+    "resolved": "native/llamero-mlx/Package.resolved",
+    "resolved_sha256": "3d161b3bb44180e752194b57d989a9f762c8c1eace2f731b6ebd9e53d88c26d0",
+    "mlx_swift_lm_revision": "e6a753aa9b42cb1a2fb9736e99ed5a4a9f40fb2e"
   }
 }

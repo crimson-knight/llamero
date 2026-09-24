@@ -81,6 +81,26 @@ private struct LlameroTokenizerLoader: MLXLMCommon.TokenizerLoader {
     }
 }
 
+// Gemma 3 is loaded as a VLMModel from this model repository, while the
+// upstream LoRATrain default loss force-casts to LLMModel. Its text-only
+// forward path produces the logits needed for supervised LoRA training.
+private func llameroLoraTrainingLoss(
+    model: Module,
+    inputs: MLXArray,
+    targets: MLXArray,
+    lengths: MLXArray
+) -> (MLXArray, MLXArray) {
+    guard let gemma3 = model as? Gemma3 else {
+        return LoRATrain.loss(model: model, inputs: inputs, targets: targets, lengths: lengths)
+    }
+
+    let logits = gemma3.callAsFunction(inputs, cache: nil).asType(.float32)
+    let lengthMask = MLXArray(0 ..< inputs.dim(1))[.newAxis, 0...] .< lengths[0..., .newAxis]
+    let tokenCount = lengthMask.sum()
+    let crossEntropyLoss = (crossEntropy(logits: logits, targets: targets) * lengthMask).sum() / tokenCount
+    return (crossEntropyLoss, tokenCount)
+}
+
 public typealias LlameroEventCallback = @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void
 
 // Reward callback for bridge-driven RL: given (prompt, completion), returns a
@@ -964,10 +984,14 @@ public func llamero_mlx_session_train_adapter(
                             ])
                         }
                     default:
+                        let trainingLoss: LoRATrain.LoraLossFunction = { model, inputs, targets, lengths in
+                            llameroLoraTrainingLoss(
+                                model: model, inputs: inputs, targets: targets, lengths: lengths)
+                        }
                         try LoRATrain.train(
                             model: context.model, train: trainingData, validate: validationData,
                             optimizer: Adam(learningRate: request.learningRate),
-                            tokenizer: trainingTokenizer, parameters: parameters
+                            loss: trainingLoss, tokenizer: trainingTokenizer, parameters: parameters
                         ) { progress in
                             switch progress {
                             case .train(let iteration, let loss, let iterationsPerSecond, let tokensPerSecond):
@@ -992,7 +1016,8 @@ public func llamero_mlx_session_train_adapter(
 
                         if !validationData.isEmpty {
                             let finalValidation = LoRATrain.evaluate(
-                                model: context.model, dataset: validationData, tokenizer: trainingTokenizer,
+                                model: context.model, dataset: validationData, loss: trainingLoss,
+                                tokenizer: trainingTokenizer,
                                 batchSize: request.batchSize, batchCount: 0
                             )
                             lastValidation = Double(finalValidation)

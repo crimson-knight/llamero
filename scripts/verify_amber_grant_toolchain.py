@@ -93,8 +93,26 @@ def main() -> int:
     verify_file(critic["aed_linter"], critic["aed_linter_sha256"], "AED critic")
     print("PASS AED naming critic")
 
+    swift_packages = pin["swift_packages"]
+    verify_file(
+        str(ROOT / swift_packages["manifest"]),
+        swift_packages["manifest_sha256"],
+        "Swift package manifest",
+    )
+    verify_file(
+        str(ROOT / swift_packages["resolved"]),
+        swift_packages["resolved_sha256"],
+        "Swift package resolution",
+    )
+    print(f"PASS Swift package pins {swift_packages['mlx_swift_lm_revision']}")
+
     bridge = pin["native_mlx_bridge"]
     verify_file(bridge["path"], bridge["sha256"], "MLX bridge")
+    verify_file(
+        str(ROOT / bridge["source_file"]),
+        bridge["source_sha256"],
+        "MLX bridge source",
+    )
     print("PASS native MLX bridge")
     return 0
 
