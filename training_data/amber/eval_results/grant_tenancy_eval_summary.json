@@ -1,0 +1,34 @@
+{
+  "after": {
+    "amber_regression": {
+      "cases": 5,
+      "compiled": 0,
+      "symbols_complete": 0,
+      "symbols_found": 7,
+      "symbols_required": 16
+    },
+    "grant_heldout": {
+      "cases": 20,
+      "compiled": 2,
+      "symbols_complete": 1,
+      "symbols_found": 9,
+      "symbols_required": 61
+    }
+  },
+  "before": {
+    "amber_regression": {
+      "cases": 5,
+      "compiled": 1,
+      "symbols_complete": 1,
+      "symbols_found": 9,
+      "symbols_required": 16
+    },
+    "grant_heldout": {
+      "cases": 20,
+      "compiled": 2,
+      "symbols_complete": 0,
+      "symbols_found": 6,
+      "symbols_required": 61
+    }
+  }
+}

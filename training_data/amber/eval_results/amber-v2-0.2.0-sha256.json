@@ -1,0 +1,12 @@
+{
+  "files": {
+    "stage-0/adapter_config.json": "6cd315d7420490358287538bd5e66c4b3201fafd68b2122ca498862d866aab9e",
+    "stage-0/adapters.safetensors": "4e6f37708abdb8147abad16f58db851e76c32ddfff2b3c307d58dd4d8f4152be",
+    "stage-1/adapter_config.json": "390ee4a57c7cccfb98a2166c0f3b2ca5526d557f936acdee07d0b125293a3d2a",
+    "stage-1/adapters.safetensors": "8929931e45afc5eabd05c97110a62cb5e88791c80d70862e6a98cd4233ad1aa9",
+    "training_filter.json": "fefd9b4a17d5131100dd2f091785a0966d5b71466efca5766377c9baa22d4f46"
+  },
+  "filter_path": "~/.llamero/filters/amber-v2-0.2.0.filter",
+  "manifest_file": "training_filter.json",
+  "manifest_sha256": "fefd9b4a17d5131100dd2f091785a0966d5b71466efca5766377c9baa22d4f46"
+}
