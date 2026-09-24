@@ -6,10 +6,12 @@
 /tmp/*.gbnf
 main.log
 .DS_Store
+/.crystal-cache/
 
-# Libraries don't need dependency lock
-# Dependencies will be locked in applications that use them
+# Keep the exact dependency lock so local compiler and training workflows
+# resolve verified source hashes.
 /shard.lock
+!/shard.lock
 
 # Swift build products for the native MLX bridge
 /native/llamero-mlx/.build/

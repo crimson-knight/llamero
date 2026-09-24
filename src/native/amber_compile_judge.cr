@@ -14,11 +14,12 @@ module Llamero::Native
   #
   # ```
   # judge = AmberCompileJudge.new(amber_root: "/path/to/amber", grant_root: "/path/to/grant")
-  # judge.compile?(snippet)  # => true if it type-checks against the framework
+  # judge.compile?(snippet) # => true if it type-checks against the framework
   # reward = FSDDReward.new(compiles: ->(c : String) { judge.compile?(c) })
   # ```
   class AmberCompileJudge
     getter work_dir : Path
+    getter last_output : String
 
     FRAMEWORK_HEADS = Set{
       "Amber", "Grant", "Granite", "JSON", "YAML", "XML", "HTTP", "DB", "URI", "UUID",
@@ -35,6 +36,7 @@ module Llamero::Native
       @work_dir = Path[work_dir || File.tempname("amber-judge")].expand
       @ready = false
       @cache = {} of String => Bool
+      @last_output = ""
     end
 
     # Build a judge from AMBER_REPO / GRANT_REPO env vars, or nil if unset/missing.
@@ -85,8 +87,12 @@ module Llamero::Native
     end
 
     private def build_ok? : Bool
-      Process.run("crystal", ["build", "--no-codegen", "harness.cr"],
-        chdir: @work_dir.to_s, output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+      standard_output = IO::Memory.new
+      standard_error = IO::Memory.new
+      status = Process.run("crystal-alpha", ["build", "--no-codegen", "harness.cr"],
+        chdir: @work_dir.to_s, output: standard_output, error: standard_error)
+      @last_output = standard_output.to_s + standard_error.to_s
+      status.success?
     rescue
       false
     end
