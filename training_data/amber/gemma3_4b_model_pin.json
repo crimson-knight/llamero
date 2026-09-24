@@ -1,0 +1,100 @@
+{
+  "model_id": "mlx-community/gemma-3-4b-it-4bit",
+  "pinned_model_id": "mlx-community/gemma-3-4b-it-4bit@93724907d4ed1745d2fe50baadf3b0b01a65abf2",
+  "revision": "93724907d4ed1745d2fe50baadf3b0b01a65abf2",
+  "source": "https://huggingface.co/api/models/mlx-community/gemma-3-4b-it-4bit/revision/93724907d4ed1745d2fe50baadf3b0b01a65abf2?blobs=true",
+  "local_cache_relative_dir": "mlx-community--gemma-3-4b-it-4bit",
+  "verified_at": "2026-09-24",
+  "files": [
+    {
+      "name": "config.json",
+      "source_file": "config.json.orig",
+      "size_bytes": 1072,
+      "git_blob_sha1": "03f9a0c56ff6ab4072d74aa484d37fabdcc2c3af",
+      "source_sha256": "5ccdde91da736e6e6f8f138268c620adcbf1219c973b884240b719a54122465b",
+      "runtime_file": "config.json",
+      "runtime_sha256": "a6361aef62863aae299e3a796fe5773ae17f5bf9065b5869fd72b42842070b2b",
+      "runtime_transform": "Llamero Gemma 3 text geometry completion in src/native/model_downloader.cr"
+    },
+    {
+      "name": "generation_config.json",
+      "source_file": "generation_config.json",
+      "size_bytes": 192,
+      "git_blob_sha1": "f60a6730afb98517298b478873c3e7a250442fcc",
+      "source_sha256": "e04ecb65db447404710114fb282baaac482d22a95e2244ecaab428b81672ba78"
+    },
+    {
+      "name": "model.safetensors",
+      "source_file": "model.safetensors",
+      "size_bytes": 3400569562,
+      "git_blob_sha1": "2afdf57c22bf934f36d405b2d5f1bc8bc35136dd",
+      "source_sha256": "94d3d701367d78584a9334ca00672b1c86e4aefa6a94167556c0485381e74af3",
+      "lfs_sha256": "94d3d701367d78584a9334ca00672b1c86e4aefa6a94167556c0485381e74af3"
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "source_file": "model.safetensors.index.json",
+      "size_bytes": 90558,
+      "git_blob_sha1": "4b95241f208f06d324d17c9675568ec58dafd9fb",
+      "source_sha256": "77f4b67de084c31c7bcd373b039908108eee6c6181607e6d53da730e5f0bc659"
+    },
+    {
+      "name": "tokenizer.json",
+      "source_file": "tokenizer.json",
+      "size_bytes": 33384568,
+      "git_blob_sha1": "29401f984828a18bb09a6128d437c6766785eb66",
+      "source_sha256": "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795",
+      "lfs_sha256": "4667f2089529e8e7657cfb6d1c19910ae71ff5f28aa7ab2ff2763330affad795"
+    },
+    {
+      "name": "tokenizer.model",
+      "source_file": "tokenizer.model",
+      "size_bytes": 4689074,
+      "git_blob_sha1": "14f810a829755bae3fafd6f97096dbd2eac556bd",
+      "source_sha256": "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c",
+      "lfs_sha256": "1299c11d7cf632ef3b4e11937501358ada021bbdf7c47638d13c0ee982f2e79c"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "source_file": "tokenizer_config.json",
+      "size_bytes": 1157007,
+      "git_blob_sha1": "c4748060f36c42626828bf029e03a47beebbd65e",
+      "source_sha256": "0d95398b39395e5cfb290683a78f3fb0551223c672d8b033333c1a5307473760"
+    },
+    {
+      "name": "added_tokens.json",
+      "source_file": "added_tokens.json",
+      "size_bytes": 35,
+      "git_blob_sha1": "e17bde03d42feda32d1abfca6d3b598b9a020df7",
+      "source_sha256": "50b2f405ba56a26d4913fd772089992252d7f942123cc0a034d96424221ba946"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "source_file": "special_tokens_map.json",
+      "size_bytes": 662,
+      "git_blob_sha1": "1a6193244714d3d78be48666cb02cdbfac62ad86",
+      "source_sha256": "2f7b0adf4fb469770bb1490e3e35df87b1dc578246c5e7e6fc76ecf33213a397"
+    },
+    {
+      "name": "preprocessor_config.json",
+      "source_file": "preprocessor_config.json",
+      "size_bytes": 570,
+      "git_blob_sha1": "b1e00fc184f61b698181821169c6374cd5813e5c",
+      "source_sha256": "f688d6bb20c5017601c4011de7ca656da8485b540b05013efdaf986c0fcc918d"
+    },
+    {
+      "name": "processor_config.json",
+      "source_file": "processor_config.json",
+      "size_bytes": 70,
+      "git_blob_sha1": "453c7966d4b5d0b4a317c585989f64c58c2a6bf0",
+      "source_sha256": "3ffd5f11778dc73e2b69b3c00535e4121e1badf7018136263cd17b5b34fbaa53"
+    },
+    {
+      "name": "chat_template.json",
+      "source_file": "chat_template.json",
+      "size_bytes": 1615,
+      "git_blob_sha1": "719b0cd0d7a373a400b0c119ee0e051f41ea88d9",
+      "source_sha256": "fe16baf728db49457cde32802cd7efc0ac8a7a9877dbe22fe3322b2d9dc6ccd9"
+    }
+  ]
+}
