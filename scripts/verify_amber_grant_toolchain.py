@@ -114,6 +114,21 @@ def main() -> int:
         "MLX bridge source",
     )
     print("PASS native MLX bridge")
+
+    audit_tool = pin["dep_pin_audit"]
+    verify_file(audit_tool["path"], audit_tool["sha256"], "dep-pin-audit")
+    result = subprocess.run(
+        [audit_tool["path"], *audit_tool["version_command"]],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    output = result.stdout + result.stderr
+    if result.returncode != audit_tool["expected_exit_code"] or not output.startswith(
+        audit_tool["version_prefix"]
+    ):
+        raise ValueError(f"dep-pin-audit version mismatch: {output.strip()}")
+    print(f"PASS dep-pin-audit {audit_tool['version_prefix']}")
     return 0
 
 

@@ -139,5 +139,14 @@
     "resolved": "native/llamero-mlx/Package.resolved",
     "resolved_sha256": "3d161b3bb44180e752194b57d989a9f762c8c1eace2f731b6ebd9e53d88c26d0",
     "mlx_swift_lm_revision": "e6a753aa9b42cb1a2fb9736e99ed5a4a9f40fb2e"
+  },
+  "dep_pin_audit": {
+    "path": "/Users/crimsonknight/.local/bin/dep-pin-audit",
+    "sha256": "6c28d46c2dc13113e2dc01b35c27af2a17759a74a74d77eed7b80348964cafcf",
+    "version_command": [
+      "--version"
+    ],
+    "expected_exit_code": 2,
+    "version_prefix": "dep-pin-audit 1.2.0"
   }
 }
