@@ -25,6 +25,12 @@ class AmberGrantFitModelPin
   property files : Array(AmberGrantFitModelFile) = [] of AmberGrantFitModelFile
 end
 
+class AmberGrantFitRenderedRow
+  include JSON::Serializable
+
+  property text : String = ""
+end
+
 class AmberGrantFitLossRecord
   include JSON::Serializable
 
@@ -47,6 +53,10 @@ class AmberGrantFitSummaryRecord
   property training_rows : Int32 = 0
   property grant_probe_rows : Int32 = 0
   property template_source : String = ""
+  property gemma3_template_mapping : String = ""
+  property training_first_row_matches_preview : Bool = false
+  property token_preview_count : Int32 = 0
+  property decoded_row_matches_bos_prefixed_training_row : Bool = false
   property completion_only_loss : Bool = false
   property iterations : Int32 = 0
   property rank : Int32 = 0
@@ -194,6 +204,8 @@ config.completion_only_loss = false
 
 progress_rows = [] of AmberGrantFitLossRecord
 training_summary_event : Llamero::Native::TrainingCompletedEvent? = nil
+first_row_matches_preview = false
+decoded_row_matches = false
 File.open(LOSS_PATH.to_s, "w") do |loss_file|
   session.train_adapter(
     "amber-grant-fit100",
@@ -211,6 +223,15 @@ File.open(LOSS_PATH.to_s, "w") do |loss_file|
 
   training_summary = session.last_training || abort("training finished without a summary")
   training_summary_event = training_summary
+  first_training_line = File.open(ADAPTER_PATH.join("dataset", "train.jsonl").to_s) do |file|
+    file.gets || abort("training dataset has no first row")
+  end
+  first_training_row = AmberGrantFitRenderedRow.from_json(first_training_line)
+  first_row_matches_preview = first_training_row.text == preview.rendered_text
+  abort "the preview row differs from the rendered row used by SFT" unless first_row_matches_preview
+  decoded_row_matches = preview.decoded_text == "<bos>#{first_training_row.text}"
+  abort "the decoded preview does not round-trip the actual SFT row" unless decoded_row_matches
+
   summary_record = AmberGrantFitSummaryRecord.new
   summary_record.model_id = pin.pinned_model_id
   summary_record.model_weights_sha256 = model_weights.lfs_sha256
@@ -219,6 +240,10 @@ File.open(LOSS_PATH.to_s, "w") do |loss_file|
   summary_record.training_rows = training_dataset.pairs.size
   summary_record.grant_probe_rows = training_summary.grant_probe_rows || 0
   summary_record.template_source = training_dataset.template_source
+  summary_record.gemma3_template_mapping = "template_from resolves the Gemma 3 chat template and selects the GEMMA3 renderer"
+  summary_record.training_first_row_matches_preview = first_row_matches_preview
+  summary_record.token_preview_count = preview.token_count
+  summary_record.decoded_row_matches_bos_prefixed_training_row = decoded_row_matches
   summary_record.completion_only_loss = training_summary.completion_only_loss
   summary_record.iterations = training_summary.iterations
   summary_record.rank = RANK
@@ -247,12 +272,12 @@ markdown = String.build do |report|
   report << "- Source filter: `#{source_filter.id}` (`#{source_filter.manifest.weights_checksum}`).\n"
   report << "- Run: SFT-only from pinned base, #{training_summary.iterations} iterations, rank #{RANK}, #{NUM_LAYERS} layers, learning rate #{LEARNING_RATE}, batch size #{BATCH_SIZE}, steps per report #{STEPS_PER_REPORT}.\n"
   report << "- Rows: #{training_summary.grant_probe_rows || 0} Grant loss-probe rows; #{training_dataset.pairs.size} Amber SFT rows.\n"
-  report << "- Template: `#{training_dataset.template_source}`; `template_from` availability `#{Llamero::Native::TrainingDataset.template_from(MODEL_PATH.to_s).nil? ? "nil" : "resolved"}`.\n"
+  report << "- Template: `#{training_dataset.template_source}`; `template_from` resolved the Gemma 3 template and selected the `GEMMA3` renderer. The first saved training row matches the preview text exactly: `#{first_row_matches_preview}`.\n"
   report << "- Completion-only loss (prompt masking): `#{training_summary.completion_only_loss}`.\n"
   report << "- Train loss: #{progress_rows.size} per-step reports; first #{losses.first? || 0.0}, final #{training_summary.final_loss}, minimum #{losses.min? || 0.0}, maximum #{losses.max? || 0.0}.\n"
   report << "- Grant loss: #{training_summary.grant_loss_before || 0.0} before -> #{training_summary.grant_loss_after || 0.0} after.\n"
   report << "- Validation loss at end: #{training_summary.final_validation_loss || 0.0}. Elapsed: #{training_summary.total_time_ms.round(0)} ms.\n"
-  report << "- Token preview: [`round3b-fit100-token-preview.jsonl`](round3b-fit100-token-preview.jsonl); it uses the same `SpecialTokenAwareTrainingTokenizer` as SFT and stores the rendered row, token IDs, and decoded text.\n"
+  report << "- Token preview: [`round3b-fit100-token-preview.jsonl`](round3b-fit100-token-preview.jsonl); the `SpecialTokenAwareTrainingTokenizer` produced #{preview.token_count} IDs and decoded exactly to the training row with its added `<bos>` prefix.\n"
   report << "- Upstream warning source: pinned `mlx-swift-lm` `Libraries/MLXLLM/LoraTrain.swift:50-66`. `LoRABatchIterator` warns when the current batch's longest row exceeds 2048, pads to the observed maximum, and shifts inputs/targets across the full sequence; it does not truncate. The prior full-corpus audit found 1/296 SFT rows over 2048, maximum 2148; 100 tokens would be lost only under hypothetical right truncation, while actual truncation was 0 rows.\n\n"
   report << "## Per-iteration loss\n\n"
   report << "| Iteration | Loss |\n| ---: | ---: |\n"

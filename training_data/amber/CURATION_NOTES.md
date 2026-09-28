@@ -159,3 +159,51 @@ still reports 17 findings (12 critical, 3 high, and 2 medium) in existing
 workflow/audio dependency declarations and version-range metadata; the exact
 Crystal lock checksums and pinned SwiftPM resolution used for this round were
 verified. Those broader findings were not changed in this corpus round.
+
+### Round 3b: adapter application and fit diagnostic (2026-09-28)
+
+The WIP diagnostics were committed before the measured runs. The 0.2.0 adapter
+is active on the Gemma 3 VLM: both stages reported `fused=true` and
+`cumulative=true`, both key remaps were identity, and all 12 same-session
+comparisons changed the full-vocabulary next-token logits (mean absolute delta
+2.503–3.472). Greedy answers changed in all 12 comparisons but contained 0/26
+required training symbols. The six verbatim training prompts produced the same
+answers under the eval and training system-prompt labels because those two
+prompts are byte-equal. The unfused two-stage chain path is unsupported by the
+current public activation API. See
+`eval_results/round3b-adapter-probe.jsonl` and
+`eval_results/round3b-adapter-probe.md`.
+
+This is case 3: inference activation/fusion works, while 0.2.0 does not
+reproduce its training examples. A diagnostic SFT-only run then trained 100
+steps from the pinned base on the 296-row corpus, rank 8, 16 layers, learning
+rate 0.0001, batch size 1, and `steps_per_report=1`. The curve contains all 100
+library-indexed steps (0–99): loss fell from 9.1279 to 1.1642; final validation
+loss was 0.9919. Loss on all 84 Grant training rows fell from 4.8631 to 0.7719.
+This shows the SFT path can fit the Grant training rows in isolation; it does
+not establish that a packaged two-stage filter improves held-out results. The
+diagnostic adapter stayed in the ignored `.crystal-cache` directory and was
+not packaged or installed.
+
+The run used full-sequence SFT (`completion_only_loss=false`), matching the
+0.2.0 training mode; the prompt tokens were not masked. In this run,
+`template_from` resolved the pinned Gemma 3 chat template and selected the
+`GEMMA3` renderer. The first saved `train.jsonl` row matched the training-token
+preview exactly; its 287 token IDs decoded to that row with the tokenizer-added
+`<bos>` prefix. This observed result differs from the earlier report that
+`template_from` returned nil, but there was no rendered-row or decoded-text
+mismatch in this run.
+
+The 2048-token warning comes from the pinned upstream
+`mlx-swift-lm` revision `e6a753aa9b42cb1a2fb9736e99ed5a4a9f40fb2e`,
+`Libraries/MLXLLM/LoraTrain.swift:50-66`. It warns when a batch's
+longest tokenized row exceeds 2048, then pads to that batch maximum and shifts
+the full sequence into inputs and targets; it does not truncate. The prior
+full-corpus audit found 1/296 SFT rows above 2048, maximum 2148. Hypothetical
+right truncation would remove 100 tail tokens from that row; actual training
+truncation was 0 rows.
+
+Artifacts: `eval_results/round3b-fit100-loss.jsonl`,
+`eval_results/round3b-fit100-token-preview.jsonl`, and
+`eval_results/round3b-fit100-diagnostic.md`. The next training measurement is
+completion-only loss masking, as a single change from the 0.2.0 recipe.
