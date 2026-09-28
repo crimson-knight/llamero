@@ -3,7 +3,8 @@
 # and compile/symbol gates run before and after training.
 #
 #   crystal-alpha run examples/train_amber_v2_adapter.cr -- [MODEL] [UNSUP_ITERS]
-#     [SFT_ITERS] [FILTER_VERSION] [FILTER_PATH] [MODEL_PATH] [full-sequence|completion-only]
+#     [SFT_ITERS] [FILTER_VERSION] [FILTER_PATH] [MODEL_PATH]
+#     [full-sequence|completion-only] [INITIAL_FILTER_PATH]
 require "../src/llamero"
 require "json"
 require "file_utils"
@@ -22,22 +23,36 @@ class AmberGrantTrainingPair
   property completion : String = ""
 end
 
-PINNED_MODEL   = "mlx-community/gemma-3-4b-it-4bit@93724907d4ed1745d2fe50baadf3b0b01a65abf2"
-MODEL          = ARGV[0]? || PINNED_MODEL
-UNSUP_ITER     = (ARGV[1]? || "200").to_i
-SFT_ITER       = (ARGV[2]? || "400").to_i
-FILTER_VERSION = ARGV[3]? || "0.2.1"
-FILTER_PATH    = Path[ARGV[4]? || Path.home.join(".llamero", "filters", "amber-v2-#{FILTER_VERSION}.filter").to_s].expand
-MODEL_PATH     = Path[ARGV[5]? || Path.home.join(".llamero", "models", "mlx-community--gemma-3-4b-it-4bit").to_s].expand
-LOSS_MODE      = ARGV[6]? || "full-sequence"
+PINNED_MODEL        = "mlx-community/gemma-3-4b-it-4bit@93724907d4ed1745d2fe50baadf3b0b01a65abf2"
+MODEL               = ARGV[0]? || PINNED_MODEL
+UNSUP_ITER          = (ARGV[1]? || "200").to_i
+SFT_ITER            = (ARGV[2]? || "400").to_i
+FILTER_VERSION      = ARGV[3]? || "0.2.1"
+FILTER_PATH         = Path[ARGV[4]? || Path.home.join(".llamero", "filters", "amber-v2-#{FILTER_VERSION}.filter").to_s].expand
+MODEL_PATH          = Path[ARGV[5]? || Path.home.join(".llamero", "models", "mlx-community--gemma-3-4b-it-4bit").to_s].expand
+LOSS_MODE           = ARGV[6]? || "full-sequence"
+INITIAL_FILTER_PATH = ARGV[7]?
 unless ["full-sequence", "completion-only"].includes?(LOSS_MODE)
   abort "loss mode must be full-sequence or completion-only; got #{LOSS_MODE}"
 end
 COMPLETION_ONLY_LOSS = LOSS_MODE == "completion-only"
-CORPUS         = Path[__DIR__].parent.join("training_data", "amber", "amber_v2_sft.jsonl")
-GRANT_PAIRS    = Path[__DIR__].parent.join("training_data", "amber", "grant_tenancy_rawsql_pairs.jsonl")
-PROBE_DIR      = Path[__DIR__].parent.join(".crystal-cache", "round3b", "#{FILTER_VERSION}-grant-loss-probe")
-SYSTEM         = "You are an expert Amber V2 and Grant developer. Answer with correct, idiomatic Crystal code."
+INITIAL_FILTER       = if initial_filter_path = INITIAL_FILTER_PATH
+                         filter = Llamero::Native::TrainingFilter.load(initial_filter_path)
+                         list_of_expected_base_models = [MODEL, MODEL.sub(/@[^@]+$/, "")]
+                         abort "initial filter base mismatch: #{filter.manifest.base_model}" unless list_of_expected_base_models.includes?(filter.manifest.base_model)
+                         abort "initial filter must be Amber 0.1.0; got #{filter.id}" unless filter.id == "amber-v2@0.1.0"
+                         unless filter.manifest.chain? && filter.manifest.stages.size == 2
+                           abort "initial Amber 0.1.0 filter must contain its two-stage chain"
+                         end
+                         unless filter.manifest.lora.rank == 8 && filter.manifest.lora.num_layers == 16
+                           abort "initial Amber filter must use rank 8 across 16 layers"
+                         end
+                         filter
+                       end
+CORPUS      = Path[__DIR__].parent.join("training_data", "amber", "amber_v2_sft.jsonl")
+GRANT_PAIRS = Path[__DIR__].parent.join("training_data", "amber", "grant_tenancy_rawsql_pairs.jsonl")
+PROBE_DIR   = Path[__DIR__].parent.join(".crystal-cache", "round3b", "#{FILTER_VERSION}-grant-loss-probe")
+SYSTEM      = "You are an expert Amber V2 and Grant developer. Answer with correct, idiomatic Crystal code."
 
 abort "refusing to overwrite an existing filter: #{FILTER_PATH}" if File.exists?(FILTER_PATH)
 abort "verified model directory is missing: #{MODEL_PATH}" unless Dir.exists?(MODEL_PATH)
@@ -46,7 +61,12 @@ bridge = Llamero::Native::MLXBridge.try_load
 abort "no MLX bridge — build native/llamero-mlx (./build.sh) first" unless bridge
 runtime = Llamero::Native::MLXRuntime.new(model_id: MODEL, model_path: MODEL_PATH.to_s, bridge: bridge)
 session = runtime.start_session
-session.load_model
+if initial_filter = INITIAL_FILTER
+  session.activate_filter(initial_filter, fuse: true)
+  puts "fused initial filter #{initial_filter.id} before Grant training"
+else
+  session.load_model
+end
 
 # Build datasets: unsupervised on the completions (absorb v2 syntax/vocab), then
 # SFT on the instruction->code pairs (idiomatic usage + format).
@@ -119,14 +139,23 @@ end
 puts "\n=== training (unsupervised #{UNSUP_ITER} -> SFT #{SFT_ITER}, fuse-forward; loss=#{LOSS_MODE}) ==="
 results = pipeline.run { |i, name| puts "  stage #{i}: #{name} (#{Time.local})" }
 
-# Ship the composed adapter as a distributable chain filter.
+# Ship the composed adapter as a distributable chain filter. When a working
+# Amber filter seeded training, include its stages so the result is standalone.
+list_of_adapter_dirs = [] of String
+list_of_provenance_methods = [] of String
+if initial_filter = INITIAL_FILTER
+  list_of_adapter_dirs.concat(initial_filter.stage_dirs.map(&.to_s))
+  list_of_provenance_methods << "fused-base-#{initial_filter.id}"
+end
+list_of_adapter_dirs.concat(results.map(&.descriptor.path))
+list_of_provenance_methods.concat(results.map(&.name))
 FileUtils.mkdir_p(FILTER_PATH.parent.to_s)
 filter = Llamero::Native::TrainingFilter.pack_chain(
-  adapter_dirs: results.map(&.descriptor.path), dest: FILTER_PATH,
+  adapter_dirs: list_of_adapter_dirs, dest: FILTER_PATH,
   name: "amber-v2", version: FILTER_VERSION, base_model: MODEL,
   lora: Llamero::Native::TrainingFilter::LoRASpec.new(rank: 8, scale: 1.0, num_layers: 16),
   provenance: Llamero::Native::TrainingFilter::Provenance.new(
-    methods: results.map(&.name), generator: "examples/train_amber_v2_adapter"),
+    methods: list_of_provenance_methods, generator: "examples/train_amber_v2_adapter"),
   library: "amber", library_version: "2.0.0-dev",
   metrics: {
     "pairs"                   => pairs_count.to_f,

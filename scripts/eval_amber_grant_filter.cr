@@ -163,8 +163,9 @@ end
 unless filter.manifest.lora.rank == 8 && filter.manifest.lora.num_layers == 16
   abort "filter LoRA shape mismatch: expected rank 8 across 16 layers"
 end
-unless filter.manifest.stages.size == 2
-  abort "expected the installed two-stage Amber V2 filter; got #{filter.manifest.stages.size} stages"
+expected_stage_count = filter.manifest.version == "0.2.2" ? 4 : 2
+unless filter.manifest.stages.size == expected_stage_count
+  abort "expected #{expected_stage_count} Amber V2 filter stages; got #{filter.manifest.stages.size}"
 end
 
 def read_eval_cases(path : Path) : Array(AmberGrantEvalCase)
