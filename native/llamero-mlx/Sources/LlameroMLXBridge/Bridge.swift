@@ -221,6 +221,16 @@ struct LogitProbeRequest: Codable {
     }
 }
 
+struct TrainingTokenizationPreviewRequest: Codable {
+    var previewId: String
+    var renderedText: String
+
+    enum CodingKeys: String, CodingKey {
+        case previewId = "preview_id"
+        case renderedText = "rendered_text"
+    }
+}
+
 struct LogitProbeBaseline {
     let systemPrompt: String
     let userPrompt: String
@@ -1520,6 +1530,75 @@ public func llamero_mlx_session_probe_next_token_logits(
             sink.fail(
                 message: "Next-token logit probe failed: \(error)",
                 code: "logit_probe_failed",
+                recoverable: true,
+                baseModelLoaded: session.loaded
+            )
+        }
+    }
+
+    return sink.drain(callback: callback, userData: userData)
+}
+
+@_cdecl("llamero_mlx_session_preview_training_tokens")
+public func llamero_mlx_session_preview_training_tokens(
+    _ handle: Int64,
+    _ requestJson: UnsafePointer<CChar>?,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let session = BridgeRegistry.shared.session(handle) else { return 2 }
+    guard let requestJson,
+        let data = String(cString: requestJson).data(using: .utf8),
+        let request = try? JSONDecoder().decode(TrainingTokenizationPreviewRequest.self, from: data)
+    else { return 3 }
+
+    let sink = EventSink(
+        sessionId: "mlx-session-\(handle)",
+        modelId: session.modelId,
+        adapterStackId: session.adapterStackId
+    )
+
+    Task.detached {
+        guard let container = session.container, session.loaded else {
+            sink.fail(
+                message: "Cannot preview training tokens before the model is loaded",
+                code: "tokenization_preview_failed",
+                recoverable: true,
+                baseModelLoaded: false
+            )
+            return
+        }
+
+        do {
+            guard !request.previewId.isEmpty, !request.renderedText.isEmpty else {
+                throw BridgeError(
+                    message: "Tokenization preview id and rendered text cannot be blank",
+                    code: "invalid_tokenization_preview")
+            }
+
+            let preview = await container.perform { context in
+                let tokenizer = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
+                let tokenIds = tokenizer.encode(text: request.renderedText, addSpecialTokens: true)
+                return (
+                    tokenCount: tokenIds.count,
+                    tokenIds: tokenIds,
+                    decodedText: tokenizer.decode(tokenIds: tokenIds, skipSpecialTokens: false)
+                )
+            }
+
+            sink.emit([
+                "event": "training_tokenization_preview_completed",
+                "preview_id": request.previewId,
+                "rendered_text": request.renderedText,
+                "token_count": preview.tokenCount,
+                "token_ids": preview.tokenIds,
+                "decoded_text": preview.decodedText,
+            ])
+            sink.finish()
+        } catch {
+            sink.fail(
+                message: "Training tokenization preview failed: \(error)",
+                code: "tokenization_preview_failed",
                 recoverable: true,
                 baseModelLoaded: session.loaded
             )

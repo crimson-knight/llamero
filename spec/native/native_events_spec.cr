@@ -73,6 +73,20 @@ describe Llamero::Native::NativeEvent do
     event.mean_absolute_logit_delta.should eq(0.025)
   end
 
+  it "parses an exact training-tokenizer preview" do
+    event = frame(%({
+      "event": "training_tokenization_preview_completed", "preview_id": "row-1",
+      "rendered_text": "<start_of_turn>model\\nGrant::Base<end_of_turn>",
+      "token_count": 4, "token_ids": [1, 2, 3, 4],
+      "decoded_text": "<start_of_turn>model\\nGrant::Base<end_of_turn>"
+    })).as(Llamero::Native::TrainingTokenizationPreviewEvent)
+
+    event.preview_id.should eq("row-1")
+    event.token_count.should eq(4)
+    event.token_ids.should eq([1, 2, 3, 4])
+    event.decoded_text.should eq("<start_of_turn>model\nGrant::Base<end_of_turn>")
+  end
+
   it "parses training loss probes and the completion-only flag" do
     event = frame(%({
       "event": "training_completed", "adapter_name": "usage",

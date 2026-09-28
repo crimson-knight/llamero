@@ -27,20 +27,21 @@ module Llamero::Native
     # frames surface as UnknownNativeEvent so callers can log and keep going.
     def self.from_bridge_json(raw : JSON::Any) : NativeEvent
       case raw["event"]?.try(&.as_s)
-      when "model_load_started"    then ModelLoadStartedEvent.new(raw)
-      when "model_load_progress"   then ModelLoadProgressEvent.new(raw)
-      when "model_loaded"          then ModelLoadedEvent.new(raw)
-      when "adapter_activated"     then AdapterActivatedEvent.new(raw)
-      when "token_delta"           then TokenDeltaEvent.new(raw)
-      when "structured_json_delta" then StructuredJsonDeltaEvent.new(raw)
-      when "generation_completed"  then GenerationCompletedEvent.new(raw)
-      when "logit_probe_completed" then LogitProbeEvent.new(raw)
-      when "training_progress"     then TrainingProgressEvent.new(raw)
-      when "training_validation"   then TrainingValidationEvent.new(raw)
-      when "training_completed"    then TrainingCompletedEvent.new(raw)
-      when "runtime_metric"        then RuntimeMetricEvent.new(raw)
-      when "error"                 then NativeErrorEvent.new(raw)
-      else                              UnknownNativeEvent.new(raw)
+      when "model_load_started"                      then ModelLoadStartedEvent.new(raw)
+      when "model_load_progress"                     then ModelLoadProgressEvent.new(raw)
+      when "model_loaded"                            then ModelLoadedEvent.new(raw)
+      when "adapter_activated"                       then AdapterActivatedEvent.new(raw)
+      when "token_delta"                             then TokenDeltaEvent.new(raw)
+      when "structured_json_delta"                   then StructuredJsonDeltaEvent.new(raw)
+      when "generation_completed"                    then GenerationCompletedEvent.new(raw)
+      when "logit_probe_completed"                   then LogitProbeEvent.new(raw)
+      when "training_tokenization_preview_completed" then TrainingTokenizationPreviewEvent.new(raw)
+      when "training_progress"                       then TrainingProgressEvent.new(raw)
+      when "training_validation"                     then TrainingValidationEvent.new(raw)
+      when "training_completed"                      then TrainingCompletedEvent.new(raw)
+      when "runtime_metric"                          then RuntimeMetricEvent.new(raw)
+      when "error"                                   then NativeErrorEvent.new(raw)
+      else                                                UnknownNativeEvent.new(raw)
       end
     end
 
@@ -233,6 +234,29 @@ module Llamero::Native
     delegate probe_id, baseline_captured, input_tokens,
       baseline_top_token_ids, baseline_top_tokens, baseline_top_logits,
       top_token_ids, top_tokens, top_logits, mean_absolute_logit_delta,
+      to: payload
+  end
+
+  # Exact token round-trip produced by the Swift training tokenizer wrapper.
+  class TrainingTokenizationPreviewPayload
+    include JSON::Serializable
+
+    property preview_id : String = ""
+    property rendered_text : String = ""
+    property token_count : Int32 = 0
+    property token_ids : Array(Int32) = [] of Int32
+    property decoded_text : String = ""
+  end
+
+  struct TrainingTokenizationPreviewEvent < NativeEvent
+    getter payload : TrainingTokenizationPreviewPayload
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @payload = TrainingTokenizationPreviewPayload.from_json(raw.to_json)
+    end
+
+    delegate preview_id, rendered_text, token_count, token_ids, decoded_text,
       to: payload
   end
 

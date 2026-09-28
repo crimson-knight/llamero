@@ -164,6 +164,19 @@ describe Llamero::Native::ModelSession do
     end
   end
 
+  describe "training tokenization previews" do
+    it "requires the real MLX bridge" do
+      session = build_runtime.start_session
+      session.load_model
+
+      error = expect_raises(Llamero::Native::BridgeUnavailableError) do
+        session.preview_training_tokens("row-1", "rendered SFT row")
+      end
+
+      error.message.not_nil!.should contain("real MLX bridge")
+    end
+  end
+
   describe "chat and streaming" do
     it "returns content with generation metrics" do
       session = build_runtime.start_session

@@ -227,6 +227,45 @@ module Llamero::Native
       end
     end
 
+    # Tokenizes and decodes one already-rendered SFT row with the exact Swift
+    # wrapper used by the LoRA training loop.
+    def preview_training_tokens(
+      preview_id : String,
+      rendered_text : String,
+    ) : TrainingTokenizationPreviewEvent
+      ensure_loaded
+      raise ArgumentError.new("preview_id cannot be blank") if preview_id.blank?
+      raise ArgumentError.new("rendered_text cannot be blank") if rendered_text.blank?
+      mlx_bridge = @bridge.as?(MLXBridge) ||
+                   raise BridgeUnavailableError.new("Training token previews require the real MLX bridge")
+
+      error : NativeErrorEvent? = nil
+      completed : TrainingTokenizationPreviewEvent? = nil
+      mlx_bridge.preview_training_tokens(@handle, tokenization_preview_request_json(
+        preview_id, rendered_text
+      )) do |frame|
+        event = dispatch(frame)
+        case event
+        when TrainingTokenizationPreviewEvent then completed = event
+        when NativeErrorEvent                 then error = event
+        end
+      end
+
+      if failure = error
+        raise failure.to_error
+      end
+      if result = completed
+        result
+      else
+        raise NativeError.new(
+          "Bridge finished a tokenization preview without a result",
+          "tokenization_preview_failed",
+          recoverable: true,
+          base_model_loaded: loaded?
+        )
+      end
+    end
+
     # Register a distributable training filter's adapter under its name so it can
     # be activated, returning the slot. The filter should already be loaded
     # (and thus checksum-verified) via `TrainingFilter.load`/`.installed`.
@@ -775,6 +814,15 @@ module Llamero::Native
           json.field "system_prompt", system_prompt
           json.field "user_prompt", user_prompt
           json.field "capture_baseline", capture_baseline
+        end
+      end
+    end
+
+    private def tokenization_preview_request_json(preview_id : String, rendered_text : String) : String
+      JSON.build do |json|
+        json.object do
+          json.field "preview_id", preview_id
+          json.field "rendered_text", rendered_text
         end
       end
     end

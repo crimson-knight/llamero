@@ -10,7 +10,7 @@ ARTIFACT_PATH="$ROOT/training_data/amber/eval_results/round3b-adapter-probe.json
 REPORT_PATH="$ROOT/training_data/amber/eval_results/round3b-adapter-probe.md"
 export CRYSTAL_CACHE_DIR="$RUN_DIR/crystal-cache"
 
-if pgrep -f '[c]rystal-alpha run (examples/train_amber_v2_adapter.cr|scripts/eval_amber_grant_filter.cr|scripts/probe_amber_grant_adapter.cr)' >/dev/null; then
+if pgrep -f '(^|/)(agent-crystal-bin|crystal-alpha) run (examples/train_amber_v2_adapter\.cr|scripts/eval_amber_grant_filter\.cr|scripts/probe_amber_grant_adapter\.cr|scripts/diagnose_amber_grant_fit\.cr)' >/dev/null; then
   printf 'Another Amber MLX training or evaluation process is active.\n' >&2
   exit 1
 fi
