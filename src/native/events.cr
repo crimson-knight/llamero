@@ -27,19 +27,20 @@ module Llamero::Native
     # frames surface as UnknownNativeEvent so callers can log and keep going.
     def self.from_bridge_json(raw : JSON::Any) : NativeEvent
       case raw["event"]?.try(&.as_s)
-      when "model_load_started"   then ModelLoadStartedEvent.new(raw)
-      when "model_load_progress"  then ModelLoadProgressEvent.new(raw)
-      when "model_loaded"         then ModelLoadedEvent.new(raw)
-      when "adapter_activated"    then AdapterActivatedEvent.new(raw)
-      when "token_delta"          then TokenDeltaEvent.new(raw)
+      when "model_load_started"    then ModelLoadStartedEvent.new(raw)
+      when "model_load_progress"   then ModelLoadProgressEvent.new(raw)
+      when "model_loaded"          then ModelLoadedEvent.new(raw)
+      when "adapter_activated"     then AdapterActivatedEvent.new(raw)
+      when "token_delta"           then TokenDeltaEvent.new(raw)
       when "structured_json_delta" then StructuredJsonDeltaEvent.new(raw)
-      when "generation_completed" then GenerationCompletedEvent.new(raw)
-      when "training_progress"    then TrainingProgressEvent.new(raw)
-      when "training_validation"  then TrainingValidationEvent.new(raw)
-      when "training_completed"   then TrainingCompletedEvent.new(raw)
-      when "runtime_metric"       then RuntimeMetricEvent.new(raw)
-      when "error"                then NativeErrorEvent.new(raw)
-      else                             UnknownNativeEvent.new(raw)
+      when "generation_completed"  then GenerationCompletedEvent.new(raw)
+      when "logit_probe_completed" then LogitProbeEvent.new(raw)
+      when "training_progress"     then TrainingProgressEvent.new(raw)
+      when "training_validation"   then TrainingValidationEvent.new(raw)
+      when "training_completed"    then TrainingCompletedEvent.new(raw)
+      when "runtime_metric"        then RuntimeMetricEvent.new(raw)
+      when "error"                 then NativeErrorEvent.new(raw)
+      else                              UnknownNativeEvent.new(raw)
       end
     end
 
@@ -204,6 +205,37 @@ module Llamero::Native
     end
   end
 
+  # Typed payload returned by the MLX next-token diagnostic probe.
+  class LogitProbeEventPayload
+    include JSON::Serializable
+
+    property probe_id : String = ""
+    property baseline_captured : Bool = false
+    property input_tokens : Int32 = 0
+    property baseline_top_token_ids : Array(Int32) = [] of Int32
+    property baseline_top_tokens : Array(String) = [] of String
+    property baseline_top_logits : Array(Float64) = [] of Float64
+    property top_token_ids : Array(Int32) = [] of Int32
+    property top_tokens : Array(String) = [] of String
+    property top_logits : Array(Float64) = [] of Float64
+    property mean_absolute_logit_delta : Float64? = nil
+  end
+
+  # Direct next-token logits measured by the MLX diagnostic probe.
+  struct LogitProbeEvent < NativeEvent
+    getter payload : LogitProbeEventPayload
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @payload = LogitProbeEventPayload.from_json(raw.to_json)
+    end
+
+    delegate probe_id, baseline_captured, input_tokens,
+      baseline_top_token_ids, baseline_top_tokens, baseline_top_logits,
+      top_token_ids, top_tokens, top_logits, mean_absolute_logit_delta,
+      to: payload
+  end
+
   struct RuntimeMetricEvent < NativeEvent
     getter name : String
     getter value : Float64
@@ -251,12 +283,12 @@ module Llamero::Native
 
     def to_error : NativeError
       case @code
-      when "model_load_failed"     then ModelLoadError.new(load_failure_message)
-      when "model_unavailable"     then ModelUnavailableError.new(@message)
-      when "adapter_incompatible"  then AdapterIncompatibleError.new(@message, base_model_loaded: @base_model_loaded)
+      when "model_load_failed"         then ModelLoadError.new(load_failure_message)
+      when "model_unavailable"         then ModelUnavailableError.new(@message)
+      when "adapter_incompatible"      then AdapterIncompatibleError.new(@message, base_model_loaded: @base_model_loaded)
       when "adapter_activation_failed" then AdapterActivationError.new(@message, base_model_loaded: @base_model_loaded)
       when "adapter_training_failed"   then AdapterTrainingError.new(@message, base_model_loaded: @base_model_loaded)
-      when "generation_failed"     then GenerationError.new(@message, base_model_loaded: @base_model_loaded)
+      when "generation_failed"         then GenerationError.new(@message, base_model_loaded: @base_model_loaded)
       when "vision_not_supported", "image_load_failed"
         GenerationError.new(@message, code: @code, base_model_loaded: @base_model_loaded)
       else

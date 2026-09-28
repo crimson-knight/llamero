@@ -55,6 +55,24 @@ describe Llamero::Native::NativeEvent do
     completed.finish_reason.should eq("stop")
   end
 
+  it "parses next-token logit probe comparisons" do
+    event = frame(%({
+      "event": "logit_probe_completed", "probe_id": "eval-row-1",
+      "baseline_captured": false, "input_tokens": 28,
+      "baseline_top_token_ids": [1, 2], "baseline_top_tokens": ["A", "B"],
+      "baseline_top_logits": [4.0, 3.0],
+      "top_token_ids": [3, 1], "top_tokens": ["C", "A"],
+      "top_logits": [4.5, 3.1], "mean_absolute_logit_delta": 0.025
+    })).as(Llamero::Native::LogitProbeEvent)
+
+    event.probe_id.should eq("eval-row-1")
+    event.baseline_captured.should be_false
+    event.input_tokens.should eq(28)
+    event.baseline_top_tokens.should eq(["A", "B"])
+    event.top_tokens.should eq(["C", "A"])
+    event.mean_absolute_logit_delta.should eq(0.025)
+  end
+
   it "parses training loss probes and the completion-only flag" do
     event = frame(%({
       "event": "training_completed", "adapter_name": "usage",

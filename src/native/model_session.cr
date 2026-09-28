@@ -191,6 +191,42 @@ module Llamero::Native
       activate_adapters(AdapterStack.none)
     end
 
+    # Captures or compares the resident Gemma 3 model's next-token logits for
+    # one exact system/user prompt. This diagnostic is used to verify that a
+    # filter activation changes the output distribution, not just session state.
+    def probe_next_token_logits(
+      probe_id : String,
+      system_prompt : String,
+      user_prompt : String,
+      capture_baseline : Bool,
+    ) : LogitProbeEvent
+      ensure_loaded
+      raise ArgumentError.new("probe_id cannot be blank") if probe_id.blank?
+      mlx_bridge = @bridge.as?(MLXBridge) ||
+                   raise BridgeUnavailableError.new("Next-token logit probes require the real MLX bridge")
+
+      error : NativeErrorEvent? = nil
+      completed : LogitProbeEvent? = nil
+      mlx_bridge.probe_next_token_logits(@handle, logit_probe_request_json(
+        probe_id, system_prompt, user_prompt, capture_baseline
+      )) do |frame|
+        event = dispatch(frame)
+        case event
+        when LogitProbeEvent  then completed = event
+        when NativeErrorEvent then error = event
+        end
+      end
+
+      if failure = error
+        raise failure.to_error
+      end
+      if result = completed
+        result
+      else
+        raise AdapterActivationError.new("Bridge finished a logit probe without a result")
+      end
+    end
+
     # Register a distributable training filter's adapter under its name so it can
     # be activated, returning the slot. The filter should already be loaded
     # (and thus checksum-verified) via `TrainingFilter.load`/`.installed`.
@@ -372,7 +408,7 @@ module Llamero::Native
     private def grpo_request_json(
       name : String, output_dir : Path, prompts : Array(String),
       config : AdapterTrainingConfig, rounds : Int32, samples : Int32,
-      temperature : Float32, max_tokens : Int32
+      temperature : Float32, max_tokens : Int32,
     ) : String
       JSON.build do |json|
         json.object do
@@ -723,6 +759,22 @@ module Llamero::Native
           end
           json.field "dpo_beta", config.dpo_beta
           json.field "kl_beta", config.kl_beta
+        end
+      end
+    end
+
+    private def logit_probe_request_json(
+      probe_id : String,
+      system_prompt : String,
+      user_prompt : String,
+      capture_baseline : Bool,
+    ) : String
+      JSON.build do |json|
+        json.object do
+          json.field "probe_id", probe_id
+          json.field "system_prompt", system_prompt
+          json.field "user_prompt", user_prompt
+          json.field "capture_baseline", capture_baseline
         end
       end
     end

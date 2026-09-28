@@ -207,6 +207,29 @@ struct TrainRequest: Codable {
     }
 }
 
+struct LogitProbeRequest: Codable {
+    var probeId: String
+    var systemPrompt: String
+    var userPrompt: String
+    var captureBaseline: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case probeId = "probe_id"
+        case systemPrompt = "system_prompt"
+        case userPrompt = "user_prompt"
+        case captureBaseline = "capture_baseline"
+    }
+}
+
+struct LogitProbeBaseline {
+    let systemPrompt: String
+    let userPrompt: String
+    let values: [Float]
+    let tokenIds: [Int]
+    let tokens: [String]
+    let logits: [Double]
+}
+
 // Bridge-driven GRPO loop request: the bridge samples completions for each
 // prompt, asks Crystal for rewards, computes group-relative advantages, and
 // runs the KL-anchored weighted update — for `rounds` rounds.
@@ -501,6 +524,7 @@ final class SessionBox: @unchecked Sendable {
     var modelKind: ModelKind = .text
     var activeAdapters: [(name: String, adapter: any ModelAdapter)] = []
     var adapterStackId = "base"
+    var logitProbeBaselines: [String: LogitProbeBaseline] = [:]
 
     init(handle: Int64, runtime: RuntimeBox) {
         self.handle = handle
@@ -1350,6 +1374,159 @@ public func llamero_mlx_session_grpo_loop(
     return sink.drainRL(
         eventCallback: eventCallback, eventUserData: eventUserData,
         rewardCallback: rewardCallback, rewardUserData: rewardUserData)
+}
+
+private func topFiveTokens(
+    logits: [Float],
+    tokenizer: any MLXLMCommon.Tokenizer
+) -> (ids: [Int], tokens: [String], values: [Double]) {
+    let count = min(5, logits.count)
+    var topIds = Array(0 ..< count)
+    topIds.sort { logits[$0] > logits[$1] }
+
+    if count > 0 && logits.count > count {
+        for candidate in count ..< logits.count where logits[candidate] > logits[topIds[count - 1]] {
+            topIds[count - 1] = candidate
+            topIds.sort { logits[$0] > logits[$1] }
+        }
+    }
+
+    return (
+        topIds,
+        topIds.map { tokenizer.convertIdToToken($0) ?? "<id \($0)>" },
+        topIds.map { Double(logits[$0]) }
+    )
+}
+
+@_cdecl("llamero_mlx_session_probe_next_token_logits")
+public func llamero_mlx_session_probe_next_token_logits(
+    _ handle: Int64,
+    _ requestJson: UnsafePointer<CChar>?,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let session = BridgeRegistry.shared.session(handle) else { return 2 }
+    guard let requestJson,
+        let data = String(cString: requestJson).data(using: .utf8),
+        let request = try? JSONDecoder().decode(LogitProbeRequest.self, from: data)
+    else { return 3 }
+
+    let sink = EventSink(
+        sessionId: "mlx-session-\(handle)",
+        modelId: session.modelId,
+        adapterStackId: session.adapterStackId
+    )
+
+    Task.detached {
+        guard let container = session.container, session.loaded else {
+            sink.fail(
+                message: "Cannot probe logits before the model is loaded",
+                code: "logit_probe_failed",
+                recoverable: true,
+                baseModelLoaded: false
+            )
+            return
+        }
+
+        do {
+            guard !request.probeId.isEmpty else {
+                throw BridgeError(message: "Logit probe id cannot be blank", code: "invalid_logit_probe")
+            }
+
+            let current = try await container.perform { context in
+                guard let gemma3 = context.model as? Gemma3 else {
+                    throw BridgeError(
+                        message: "Next-token logit probes currently require Gemma 3",
+                        code: "unsupported_logit_probe_model")
+                }
+
+                let messages: [[String: any Sendable]] = [
+                    ["role": "system", "content": request.systemPrompt],
+                    ["role": "user", "content": request.userPrompt],
+                ]
+                let tokenIds = try context.tokenizer.applyChatTemplate(
+                    messages: messages, tools: nil, additionalContext: nil)
+                guard !tokenIds.isEmpty else {
+                    throw BridgeError(message: "Chat template produced no input tokens", code: "empty_logit_probe_input")
+                }
+
+                let inputs = MLXArray(tokenIds.map { Int32($0) }).expandedDimensions(axis: 0)
+                let output = gemma3.callAsFunction(inputs, cache: nil).asType(.float32)
+                let values = output[0, output.dim(1) - 1, 0...].asArray(Float.self)
+                guard values.count > 5, values.allSatisfy({ $0.isFinite }) else {
+                    throw BridgeError(message: "Gemma 3 produced invalid next-token logits", code: "invalid_logit_probe_output")
+                }
+                let top = topFiveTokens(logits: values, tokenizer: context.tokenizer)
+                return (
+                    inputCount: tokenIds.count,
+                    values: values,
+                    tokenIds: top.ids,
+                    tokens: top.tokens,
+                    logits: top.values
+                )
+            }
+
+            if request.captureBaseline {
+                session.logitProbeBaselines[request.probeId] = LogitProbeBaseline(
+                    systemPrompt: request.systemPrompt,
+                    userPrompt: request.userPrompt,
+                    values: current.values,
+                    tokenIds: current.tokenIds,
+                    tokens: current.tokens,
+                    logits: current.logits
+                )
+                sink.emit([
+                    "event": "logit_probe_completed",
+                    "probe_id": request.probeId,
+                    "baseline_captured": true,
+                    "input_tokens": current.inputCount,
+                    "top_token_ids": current.tokenIds,
+                    "top_tokens": current.tokens,
+                    "top_logits": current.logits,
+                ])
+            } else {
+                guard let baseline = session.logitProbeBaselines[request.probeId] else {
+                    throw BridgeError(
+                        message: "No base-logit baseline was captured for probe \(request.probeId)",
+                        code: "missing_logit_probe_baseline")
+                }
+                guard baseline.systemPrompt == request.systemPrompt,
+                    baseline.userPrompt == request.userPrompt,
+                    baseline.values.count == current.values.count
+                else {
+                    throw BridgeError(
+                        message: "Logit probe comparison does not match its baseline prompt or vocabulary",
+                        code: "logit_probe_baseline_mismatch")
+                }
+                let meanAbsoluteDelta = zip(baseline.values, current.values)
+                    .reduce(0.0) { $0 + abs(Double($1.0) - Double($1.1)) }
+                    / Double(current.values.count)
+                sink.emit([
+                    "event": "logit_probe_completed",
+                    "probe_id": request.probeId,
+                    "baseline_captured": false,
+                    "input_tokens": current.inputCount,
+                    "baseline_top_token_ids": baseline.tokenIds,
+                    "baseline_top_tokens": baseline.tokens,
+                    "baseline_top_logits": baseline.logits,
+                    "top_token_ids": current.tokenIds,
+                    "top_tokens": current.tokens,
+                    "top_logits": current.logits,
+                    "mean_absolute_logit_delta": meanAbsoluteDelta,
+                ])
+            }
+            sink.finish()
+        } catch {
+            sink.fail(
+                message: "Next-token logit probe failed: \(error)",
+                code: "logit_probe_failed",
+                recoverable: true,
+                baseModelLoaded: session.loaded
+            )
+        }
+    }
+
+    return sink.drain(callback: callback, userData: userData)
 }
 
 @_cdecl("llamero_mlx_session_generate")
