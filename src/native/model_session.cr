@@ -42,6 +42,7 @@ module Llamero::Native
     getter active_adapter_stack : AdapterStack
     getter load_metrics : ModelLoadMetrics?
     getter last_generation_metrics : GenerationMetrics?
+    getter last_adapter_key_remaps : Array(String) = [] of String
 
     # Number of times the base model has been loaded into memory. Adapter
     # activations must not increase this.
@@ -157,6 +158,7 @@ module Llamero::Native
       reloaded = false
       fused = false
       cumulative_fused = false
+      key_remaps = [] of String
 
       @bridge.activate_adapters(@handle, bridge_stack_json(stack, resolved, fuse, cumulative)) do |frame|
         event = dispatch(frame)
@@ -165,6 +167,7 @@ module Llamero::Native
           reloaded = event.base_model_reloaded
           fused = event.fused
           cumulative_fused = event.cumulative
+          key_remaps = event.adapter_key_remaps
         when NativeErrorEvent
           error = event
         end
@@ -180,6 +183,7 @@ module Llamero::Native
       @active_adapter_stack = cumulative_fused ? AdapterStack.none : stack
       @active_adapters_fused = fused && !cumulative_fused
       @base_model_reloaded = reloaded
+      @last_adapter_key_remaps = key_remaps
     end
 
     # Returns the session to base-model-only generation.
@@ -212,12 +216,15 @@ module Llamero::Native
     ) : Nil
       if filter.manifest.chain?
         load_model
+        key_remaps = [] of String
         filter.stage_dirs.each_with_index do |dir, i|
           stage_name = "#{filter.name}-stage-#{i}"
           @registry.register(stage_name, dir)
           activate_adapters(
             AdapterStack.additive([AdapterSlot.new(stage_name)]), fuse: true, cumulative: true)
+          key_remaps.concat(@last_adapter_key_remaps)
         end
+        @last_adapter_key_remaps = key_remaps
       else
         slot = install_filter(filter, scale)
         activate_adapters(AdapterStack.additive([slot]), fuse: fuse, cumulative: cumulative)

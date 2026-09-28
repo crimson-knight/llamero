@@ -89,6 +89,8 @@ module Llamero::Native
     # Whether the fuse was cumulative (fuse-forward): baked permanently into the
     # base so the next training stage trains on top of it.
     getter cumulative : Bool
+    # Actual key-layout decisions made while loading this adapter stack.
+    getter adapter_key_remaps : Array(String)
 
     def initialize(raw : JSON::Any)
       super(raw)
@@ -96,6 +98,7 @@ module Llamero::Native
       @base_model_reloaded = raw["base_model_reloaded"]?.try(&.as_bool) || false
       @fused = raw["fused"]?.try(&.as_bool) || false
       @cumulative = raw["cumulative"]?.try(&.as_bool) || false
+      @adapter_key_remaps = raw["adapter_key_remaps"]?.try(&.as_a.map(&.as_s)) || [] of String
     end
   end
 

@@ -40,6 +40,10 @@ let package = Package(
                 // strict-concurrency checking from fighting the FFI patterns.
                 .swiftLanguageMode(.v5)
             ]
+        ),
+        .testTarget(
+            name: "LlameroMLXBridgeTests",
+            dependencies: ["LlameroMLXBridge"]
         )
     ]
 )

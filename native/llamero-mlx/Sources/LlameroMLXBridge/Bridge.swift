@@ -252,6 +252,51 @@ struct BridgeError: Error, CustomStringConvertible {
     var description: String { message }
 }
 
+private func loadCompatibleLoRAAdapter(
+    directory: URL,
+    model: LanguageModel
+) throws -> (adapter: LoRAContainer, keyRemap: String) {
+    let stored = try LoRAContainer.from(directory: directory)
+    let expected = try LoRAContainer.from(model: model, configuration: stored.configuration)
+    defer { expected.unload(from: model) }
+
+    let storedParameters = Dictionary(uniqueKeysWithValues: stored.parameters.flattened())
+    let expectedParameters = Dictionary(uniqueKeysWithValues: expected.parameters.flattened())
+    let mapping = try AdapterKeyRemapping.mapping(
+        sourceKeys: Array(storedParameters.keys),
+        targetKeys: Array(expectedParameters.keys))
+
+    var compatibleParameters: [String: MLXArray] = [:]
+    for (sourceKey, targetKey) in mapping {
+        guard let source = storedParameters[sourceKey], let target = expectedParameters[targetKey] else {
+            throw BridgeError(
+                message: "LoRA parameter mapping refers to a missing tensor",
+                code: "adapter_key_mismatch")
+        }
+        guard source.shape == target.shape else {
+            throw BridgeError(
+                message: "LoRA parameter shape mismatch at \(sourceKey) -> \(targetKey): \(source.shape) vs \(target.shape)",
+                code: "adapter_shape_mismatch")
+        }
+        compatibleParameters[targetKey] = source
+    }
+
+    let keyRemap: String
+    if mapping.allSatisfy({ $0.key == $0.value }) {
+        keyRemap = "identity"
+    } else if mapping.keys.allSatisfy({ $0.hasPrefix(AdapterKeyRemapping.legacyLayerPrefix) }) {
+        keyRemap = "model.layers.->language_model.model.layers."
+    } else {
+        keyRemap = "language_model.model.layers.->model.layers."
+    }
+
+    return (
+        LoRAContainer(
+            configuration: stored.configuration,
+            parameters: ModuleParameters.unflattened(compatibleParameters)),
+        keyRemap)
+}
+
 enum ModelKind: String {
     case text
     case vision
@@ -818,14 +863,16 @@ public func llamero_mlx_session_activate_adapters(
             // "active" so the Crystal side reloads on the next swap.)
             let cumulativeFuse = didFuse && (payload.cumulative ?? false)
 
-            try await container.perform { context in
+            let keyRemaps = try await container.perform { context -> [String] in
                 for (_, adapter) in session.activeAdapters.reversed() {
                     adapter.unload(from: context.model)
                 }
                 session.activeAdapters = []
 
                 if let slot = payload.slots.first {
-                    let adapter = try LoRAContainer.from(directory: URL(fileURLWithPath: slot.path))
+                    let loaded = try loadCompatibleLoRAAdapter(
+                        directory: URL(fileURLWithPath: slot.path), model: context.model)
+                    let adapter = loaded.adapter
                     if shouldFuse {
                         try adapter.fuse(with: context.model)
                     } else {
@@ -835,7 +882,9 @@ public func llamero_mlx_session_activate_adapters(
                     // were baked in), so leave activeAdapters empty -> training the
                     // next stage is allowed and runs on the fused base.
                     session.activeAdapters = cumulativeFuse ? [] : [(slot.name, adapter)]
+                    return ["\(slot.name):\(loaded.keyRemap)"]
                 }
+                return []
             }
 
             session.adapterStackId = payload.stackId
@@ -843,6 +892,7 @@ public func llamero_mlx_session_activate_adapters(
             sink.emit([
                 "event": "adapter_activated",
                 "adapter_names": payload.slots.map(\.name),
+                "adapter_key_remaps": keyRemaps,
                 "base_model_reloaded": false,
                 "fused": didFuse,
                 "cumulative": cumulativeFuse,
