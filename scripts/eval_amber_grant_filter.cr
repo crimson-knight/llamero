@@ -58,6 +58,7 @@ class AmberGrantEvalRecord
   property filter_weights_checksum : String = ""
   property source_filter_weights_checksum : String = ""
   property adapter_key_remap : String = "none"
+  property generation_temperature : Float32 = 0.0_f32
   property weights_sha256 : String = ""
   property id : String = ""
   property cohort : String = ""
@@ -80,6 +81,7 @@ class AmberGrantEvalRecord
     @filter_weights_checksum : String,
     @source_filter_weights_checksum : String,
     @adapter_key_remap : String,
+    @generation_temperature : Float32,
     @weights_sha256 : String,
     @id : String,
     @cohort : String,
@@ -98,7 +100,7 @@ class AmberGrantEvalRecord
 end
 
 ROOT                = Path[__DIR__].parent
-EVAL_PATH           = ROOT.join("training_data", "amber", "grant_tenancy_eval.jsonl")
+EVAL_PATH           = Path[ENV["AMBER_GRANT_EVAL_PATH"]? || ROOT.join("training_data", "amber", "grant_tenancy_eval.jsonl").to_s].expand
 CORPUS_PATH         = ROOT.join("training_data", "amber", "amber_v2_sft.jsonl")
 PIN_PATH            = ROOT.join("training_data", "amber", "gemma3_4b_model_pin.json")
 GRANT_ROOT          = ROOT.join(".crystal-cache", "grant-c6b5e72")
@@ -135,8 +137,8 @@ phase = ARGV[0]? || abort("Usage: crystal-alpha run scripts/eval_amber_grant_fil
 filter_path = ARGV[1]? || abort("filter path is required")
 output_path = Path[ARGV[2]? || abort("output path is required")].expand
 validate_only = ARGV[3]? == "--validate-only"
-unless phase == "before" || phase == "after"
-  abort "phase must be before or after"
+unless phase == "before" || phase == "after" || phase.starts_with?("round3b-")
+  abort "phase must be before, after, or round3b-<configuration>-run-<number>"
 end
 abort "refusing to overwrite eval artifact: #{output_path}" if File.exists?(output_path) && !validate_only
 abort "held-out Grant eval is missing: #{EVAL_PATH}" unless File.exists?(EVAL_PATH)
@@ -149,16 +151,14 @@ model_id = pin.pinned_model_id
 model_path = Path.home.join(".llamero", "models", pin.local_cache_relative_dir)
 filter = Llamero::Native::TrainingFilter.load(filter_path)
 source_filter_weights_checksum = ENV["AMBER_SOURCE_FILTER_WEIGHTS_SHA256"]? || filter.manifest.weights_checksum
-adapter_key_remap = ENV["AMBER_ADAPTER_KEY_REMAP"]? || "none"
 if phase == "before" && filter.manifest.version != "0.1.0"
   abort "before eval requires the installed 0.1.0 filter; got #{filter.manifest.id}"
 end
 if phase == "after" && filter.manifest.version != "0.2.0"
   abort "after eval requires filter version 0.2.0; got #{filter.manifest.id}"
 end
-expected_filter_base = phase == "before" ? pin.model_id : pin.pinned_model_id
-unless filter.manifest.base_model == expected_filter_base
-  abort "filter base mismatch: expected #{expected_filter_base}; got #{filter.manifest.base_model}"
+unless [pin.model_id, pin.pinned_model_id].includes?(filter.manifest.base_model)
+  abort "filter base mismatch: expected #{pin.model_id} or #{pin.pinned_model_id}; got #{filter.manifest.base_model}"
 end
 unless filter.manifest.lora.rank == 8 && filter.manifest.lora.num_layers == 16
   abort "filter LoRA shape mismatch: expected rank 8 across 16 layers"
@@ -227,8 +227,8 @@ def short_compiler_output(output : String) : String
 end
 
 grant_cases = read_eval_cases(EVAL_PATH)
-unless (15..25).includes?(grant_cases.size)
-  abort "held-out Grant eval needs 15-25 cases; found #{grant_cases.size}"
+unless (15..60).includes?(grant_cases.size)
+  abort "held-out Grant eval needs 15-60 cases; found #{grant_cases.size}"
 end
 all_cases = grant_cases + OLD_AMBER_QUESTIONS
 corpus_prompts = read_corpus_prompts(CORPUS_PATH)
@@ -265,7 +265,7 @@ session = runtime.start_session
 session.load_model
 session.activate_filter(filter, fuse: true)
 
-system_prompt = "You write complete, idiomatic Crystal code for Amber V2 and Grant. Output only Crystal source code, with no prose or Markdown fences. Use concrete models and methods rather than placeholders."
+system_prompt = "You are an expert Amber V2 and Grant developer. Answer with correct, idiomatic Crystal code."
 
 FileUtils.mkdir_p(output_path.parent.to_s)
 compiled_count = 0
@@ -275,6 +275,7 @@ File.open(output_path.to_s, "w") do |artifact|
   all_cases.each_with_index do |test_case, index|
     raw_answer = session.chat(
       [Llamero::Message.system(system_prompt), Llamero::Message.user(test_case.question)],
+      temperature: 0.0_f32,
       max_tokens: 600
     ).content.strip
     code = Llamero::Native::RL.extract_code(raw_answer).strip
@@ -294,7 +295,8 @@ File.open(output_path.to_s, "w") do |artifact|
       filter_base_model: filter.manifest.base_model,
       filter_weights_checksum: filter.manifest.weights_checksum,
       source_filter_weights_checksum: source_filter_weights_checksum,
-      adapter_key_remap: adapter_key_remap,
+      adapter_key_remap: session.last_adapter_key_remaps.join(","),
+      generation_temperature: 0.0_f32,
       weights_sha256: weights_pin.lfs_sha256,
       id: test_case.id,
       cohort: test_case.topic == "routing" || test_case.topic == "websockets" || test_case.topic == "schema" || test_case.topic == "jobs" || test_case.topic == "controllers" ? "amber_regression" : "grant_heldout",
