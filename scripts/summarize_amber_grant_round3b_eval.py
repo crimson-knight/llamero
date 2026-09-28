@@ -39,25 +39,31 @@ def main() -> int:
                 f"{ratio(symbol_hits, symbol_total)} |"
             )
 
-    run_names = list(runs)
-    for left_index, left_name in enumerate(run_names):
-        for right_name in run_names[left_index + 1 :]:
-            left = {record["id"]: record for record in runs[left_name]}
-            right = {record["id"]: record for record in runs[right_name]}
-            if left.keys() != right.keys():
-                print(f"run agreement {left_name} vs {right_name}: question IDs differ")
-                continue
-            same_answers = sum(left[key]["raw_answer"] == right[key]["raw_answer"] for key in left)
-            same_scores = sum(
-                left[key]["compiled"] == right[key]["compiled"]
-                and left[key]["found_symbols"] == right[key]["found_symbols"]
-                for key in left
-            )
-            print(
-                f"run agreement {left_name} vs {right_name}: "
-                f"answers {ratio(same_answers, len(left))}; "
-                f"compile+symbols {ratio(same_scores, len(left))}"
-            )
+    by_configuration: dict[str, list[tuple[str, list[dict]]]] = defaultdict(list)
+    for run_name, records in runs.items():
+        configuration = records[0]["phase"].rsplit("-run-", 1)[0]
+        by_configuration[configuration].append((run_name, records))
+
+    for configuration, config_runs in sorted(by_configuration.items()):
+        if len(config_runs) < 2:
+            continue
+        (left_name, left_records), (right_name, right_records) = config_runs[:2]
+        left = {record["id"]: record for record in left_records}
+        right = {record["id"]: record for record in right_records}
+        if left.keys() != right.keys():
+            print(f"run agreement {configuration}: question IDs differ")
+            continue
+        same_answers = sum(left[key]["raw_answer"] == right[key]["raw_answer"] for key in left)
+        same_scores = sum(
+            left[key]["compiled"] == right[key]["compiled"]
+            and left[key]["found_symbols"] == right[key]["found_symbols"]
+            for key in left
+        )
+        print(
+            f"run agreement {configuration} ({left_name} vs {right_name}): "
+            f"answers {ratio(same_answers, len(left))}; "
+            f"compile+symbols {ratio(same_scores, len(left))}"
+        )
     return 0
 
 

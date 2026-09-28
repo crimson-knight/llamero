@@ -1,0 +1,361 @@
+Amber compile harness probes: 2/2
+held-out prompt overlap check: 42 questions checked against 296 training prompts
+1/42 grant_row_scope_customer: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'method_missing'
+
+Code in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+       ^
+Called macro defined in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+
+Which expanded to:
+
+ > 1 | @query.is_readonly
+              ^----------
+Error: undefined method 'is_readonly' for Grant::Query::Builder(Invoice)
+2/42 grant_row_missing_context: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:5:23
+
+ 5 | class InvoiceService< Grant::Service
+                           ^-------------
+Error: undefined constant Grant::Service
+3/42 grant_row_mismatch: compile=true symbols=0/3
+4/42 grant_row_nested: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:5:5
+
+ 5 | @depth = depth || 1
+     ^-----
+Error: @instance_vars are not yet allowed in metaclasses: use @@class_vars instead
+5/42 grant_row_eager_load: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:32:31
+
+ 32 | invoice = Account.find!(12).invoices.first
+                                  ^-------
+Error: undefined method 'invoices' for Account
+6/42 grant_row_admin_unscoped: compile=true symbols=0/2
+7/42 grant_row_fiber: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:4:25
+
+ 4 | class InvoiceProcessor< Grant::Processor
+                             ^---------------
+Error: undefined constant Grant::Processor
+8/42 grant_schema_global: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:41:27
+
+ 41 | invoice = Invoice.find!(params["id"])
+                              ^-----
+Error: undefined local variable or method 'params' for top-level
+9/42 grant_schema_create: compile=false symbols=0/4
+In harness.cr:13:9
+
+ 13 | string: :invoice_id, required: true
+            ^
+Warning: space required before colon in type declaration (run `crystal tool format` to fix this)
+
+A total of 1 warnings were found.
+In harness.cr:13:11
+
+ 13 | string: :invoice_id, required: true
+              ^
+Error: unexpected token: "invoice_id"
+10/42 grant_schema_list_drop: compile=false symbols=0/3
+In harness.cr:16:5
+
+ 16 | // Delete all objects inside the schema
+      ^
+Error: unexpected token: "//"
+11/42 grant_schema_invalid: compile=false symbols=0/2
+In harness.cr:8:9
+
+ 8 | "Schema name '#{@name}' is invalid. It must start with a letter"
+     ^
+Error: interpolation not allowed in named argument
+12/42 grant_public_sql: compile=false symbols=0/4
+In harness.cr:50:27
+
+ 50 | column :status, String? = "active"
+                              ^
+Error: unexpected token: "="
+13/42 amber_handler_row_tenant: compile=false symbols=0/4
+In harness.cr:13:36
+
+ 13 | return ctx.response.status_code: 404, ctx.response.headers["Content-Type"] => "text/plain") if account_id.nil?
+                                     ^
+Error: unexpected token: ":"
+14/42 amber_web_pipeline: compile=false symbols=0/3
+In harness.cr:27:21
+
+ 27 | c.tag<input type=\"hidden\" name=\"csrf-token\" value=\"#{@csrf_token}\">")
+                        ^
+Error: unknown token: '"'
+15/42 apartment_map_switch: compile=false symbols=0/2
+In harness.cr:37:45
+
+ 37 | string :billing_address, format: "address")
+                                                ^
+Error: unexpected token: ")"
+16/42 grant_raw_find_count: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'method_missing'
+
+Code in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+       ^
+Called macro defined in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+
+Which expanded to:
+
+ > 1 | @query.like(_arg0, _arg1)
+              ^---
+Error: undefined method 'like' for Grant::Query::Builder(Newsletter)
+17/42 grant_raw_result: compile=false symbols=1/4
+In harness.cr:22:30
+
+ 22 | @pending_grants = Grant::where(status: "pending").select
+                               ^
+Error: expecting token 'CONST', not 'where'
+18/42 grant_raw_bound: compile=true symbols=0/3
+19/42 grant_raw_scoped: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:51:9
+
+ 51 | invoice.execute
+              ^------
+Error: undefined method 'execute' for InvoiceRawSql
+20/42 grant_parity_where_missing: compile=false symbols=0/4
+In harness.cr:29:26
+
+ 29 | string :schema_version : Int32, default: 1
+                             ^
+Error: unexpected token: ":"
+21/42 grant_schema_shared_audit: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:24:33
+
+ 24 | class GenerateReportController< Grant::Controller::Base
+                                      ^----------------------
+Error: undefined constant Grant::Controller::Base
+22/42 grant_schema_switch_restore: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:3:23
+
+ 3 | class SchemaImporter< Grant::Importer
+                           ^--------------
+Error: undefined constant Grant::Importer
+23/42 amber_tenant_pipe_unknown: compile=true symbols=0/3
+24/42 amber_tenant_pipe_context: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'finished'
+
+Code in macro 'inherited'
+
+ 178 | macro finished
+       ^
+Called macro defined in macro 'inherited'
+
+ 178 | macro finished
+
+Which expanded to:
+
+    8 | # user.save        # INSERTs the row
+    9 | # ```
+ > 10 | def initialize(**args)
+            ^---------
+Error: this 'initialize' doesn't explicitly initialize instance variable '@tenant_id' of Tenant, rendering it nilable
+
+The instance variable '@tenant_id' is initialized in other 'initialize' methods,
+and by not initializing it here it's not clear if the variable is supposed
+to be nilable or if this is a mistake.
+
+To fix this error, either assign nil to it here:
+
+  @tenant_id = nil
+
+Or declare it as nilable outside at the type level:
+
+  @tenant_id : (String)?
+25/42 amber_tenant_pipe_schema: compile=false symbols=0/3
+In harness.cr:33:1
+Error: expecting identifier 'end', not 'EOF'
+26/42 amber_tenant_pipe_routes: compile=false symbols=1/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:27:10
+
+ 27 | plug Amber::Pipe::Tenant.new
+           ^------------------
+Error: undefined constant Amber::Pipe::Tenant
+27/42 apartment_schema_switch: compile=false symbols=0/2
+In harness.cr:21:35
+
+ 21 | query = Invoice.where.not_like(:number, "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@", "%[pattern]%@",
+                                    ^
+Error: unterminated call
+28/42 apartment_current_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:6:23
+
+ 6 | class SchemaImporter< Grant::Importer
+                           ^--------------
+Error: undefined constant Grant::Importer
+29/42 apartment_create_schema: compile=true symbols=0/2
+30/42 apartment_drop_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:30:8
+
+ 30 | Tenant.drop(id: 7_i64)
+             ^---
+Error: undefined method 'drop' for Tenant.class
+31/42 apartment_row_tenant: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'method_missing'
+
+Code in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+       ^
+Called macro defined in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+
+Which expanded to:
+
+ > 1 | @query.call
+              ^---
+Error: undefined method 'call' for Grant::Query::Builder(Apartment)
+
+Did you mean 'all'?
+32/42 grant_raw_select_one: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'table'
+
+Code in harness.cr:6:5
+
+ 6 | table orders do |c|
+     ^
+Called macro defined in lib/grant/src/grant/table.cr:49:3
+
+ 49 | macro table(name)
+
+Which expanded to:
+
+   1 | @[Grant::Table(name: "orders")]
+ > 2 | class ::Order; end
+             ^
+Error: can't declare class dynamically
+33/42 grant_parity_habtm: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'has_many'
+
+Code in harness.cr:15:3
+
+ 15 | has_many :comments
+      ^
+Called macro defined in lib/grant/src/grant/associations.cr:529:3
+
+ 529 | macro has_many(model, scope = nil, **options)
+
+Which expanded to:
+
+   112 | # Stage assigned has_many records and persist them through the owner's save.
+   113 | setup_autosave(comments, :has_many, "user_id", "id", false)
+ > 114 | @_comments_for_autosave : Array(Comment)? = nil
+                                         ^------
+Error: undefined constant Comment
+34/42 grant_parity_create_or_find: compile=true symbols=1/3
+35/42 grant_parity_composite_keys: compile=true symbols=0/3
+36/42 grant_parity_raw_sql: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'finished'
+
+Code in macro 'inherited'
+
+ 178 | macro finished
+       ^
+Called macro defined in macro 'inherited'
+
+ 178 | macro finished
+
+Which expanded to:
+
+    8 | # user.save        # INSERTs the row
+    9 | # ```
+ > 10 | def initialize(**args)
+            ^---------
+Error: this 'initialize' doesn't explicitly initialize instance variable '@raw_sql' of User, rendering it nilable
+
+The instance variable '@raw_sql' is initialized in other 'initialize' methods,
+and by not initializing it here it's not clear if the variable is supposed
+to be nilable or if this is a mistake.
+
+To fix this error, either assign nil to it here:
+
+  @raw_sql = nil
+
+Or declare it as nilable outside at the type level:
+
+  @raw_sql : (String)?
+37/42 grant_parity_transactions: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:27:14
+
+ 27 | pending_tx = transaction.create(
+                   ^----------
+Error: undefined local variable or method 'transaction' for top-level
+38/42 amber_heldout_route: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:11:5
+
+ 11 | def index
+          ^----
+Error: can't declare def dynamically
+39/42 amber_heldout_channel: compile=true symbols=1/3
+40/42 amber_heldout_schema: compile=false symbols=0/3
+In harness.cr:36:14
+
+ 36 | default_age: 20
+                 ^
+Warning: space required before colon in type declaration (run `crystal tool format` to fix this)
+
+A total of 1 warnings were found.
+In harness.cr:36:16
+
+ 36 | default_age: 20
+                   ^
+Error: unexpected token: "20"
+41/42 amber_heldout_job: compile=true symbols=4/4
+42/42 amber_heldout_controller: compile=true symbols=1/3
+compile rate: 10/42
+required-symbol complete cases: 1/42
+artifact: /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/eval_results/round3b-baseline-0.1.0-run-1.jsonl
