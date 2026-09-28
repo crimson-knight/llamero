@@ -34,7 +34,7 @@ python3 scripts/verify_amber_model_pin.py
 
 mkdir -p "$RUN_DIR"
 nohup crystal-alpha run examples/train_amber_v2_adapter.cr -- \
-  "$MODEL_ID" 200 400 "$FILTER_VERSION" "$FILTER_PATH" "$MODEL_PATH" full-sequence \
+  "$MODEL_ID" 200 400 "$FILTER_VERSION" "$FILTER_PATH" "$MODEL_PATH" completion-only \
   >"$LOG_PATH" 2>&1 </dev/null &
 JOB_PID=$!
 printf '%s\n' "$JOB_PID" >"$LOG_PATH.pid"
