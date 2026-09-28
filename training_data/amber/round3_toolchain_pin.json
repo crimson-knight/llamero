@@ -129,13 +129,13 @@
   },
   "native_mlx_bridge": {
     "path": "/Users/crimsonknight/.llamero/lib/libLlameroMLXBridge.dylib",
-    "sha256": "a95fec1df34febb938dc4a41f92e4c520c7defdc165a628c9689279c39ce3db2",
+    "sha256": "7cfe9c8458b00c5368f42395b946a2f6728afd047ed69149c771feb5c8985955",
     "source_file": "native/llamero-mlx/Sources/LlameroMLXBridge/Bridge.swift",
-    "source_sha256": "664054f907c6207a2eae82bc91c14c90e2f03f737398962c5da982bd020dd45f"
+    "source_sha256": "94569f54e01371933cef50e50ca2bff268a02fd302055def02fd04e438db2b50"
   },
   "swift_packages": {
     "manifest": "native/llamero-mlx/Package.swift",
-    "manifest_sha256": "07870910463cf880a9de793911ea723ee77bd7de61b7c1a3f88e2b19b10d0882",
+    "manifest_sha256": "d03ee188b53ea556efafccef1b80289872a5d66cc48708a07dea3587704e7898",
     "resolved": "native/llamero-mlx/Package.resolved",
     "resolved_sha256": "3d161b3bb44180e752194b57d989a9f762c8c1eace2f731b6ebd9e53d88c26d0",
     "mlx_swift_lm_revision": "e6a753aa9b42cb1a2fb9736e99ed5a4a9f40fb2e"
