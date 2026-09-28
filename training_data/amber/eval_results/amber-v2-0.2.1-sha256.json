@@ -1,0 +1,25 @@
+{
+  "filter_id": "amber-v2@0.2.1",
+  "files": [
+    {
+      "path": "stage-0/adapter_config.json",
+      "sha256": "1ec110aa5e63b92c5c4eb1b823c4931ad85cfa9072699dbd6116c7fb2b0dedde"
+    },
+    {
+      "path": "stage-0/adapters.safetensors",
+      "sha256": "3bbebf0621b1b9b1087dc315542fa674fb0ef9efece0ae598bb2cdd715081568"
+    },
+    {
+      "path": "stage-1/adapter_config.json",
+      "sha256": "eac45a602d9e810edcbcb92653eb158f0244f96852010ce582c84c8c348a39f8"
+    },
+    {
+      "path": "stage-1/adapters.safetensors",
+      "sha256": "0a6a8c653be38f91e5b2e82a3f7d46c772e03e78942808932c3365b6bb18e0f0"
+    },
+    {
+      "path": "training_filter.json",
+      "sha256": "60dd6eb3a036b9ae7298bf20371a7726ebe25df67f411a6ceb6bdcdf7bc8c8e8"
+    }
+  ]
+}

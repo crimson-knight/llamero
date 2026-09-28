@@ -205,5 +205,56 @@ truncation was 0 rows.
 
 Artifacts: `eval_results/round3b-fit100-loss.jsonl`,
 `eval_results/round3b-fit100-token-preview.jsonl`, and
-`eval_results/round3b-fit100-diagnostic.md`. The next training measurement is
-completion-only loss masking, as a single change from the 0.2.0 recipe.
+`eval_results/round3b-fit100-diagnostic.md`.
+
+#### Completion-only training trial: 0.2.1
+
+The next single training change enabled SFT completion-only loss masking;
+the base model, GEMMA3 template, 200 syntax iterations, 400 usage iterations,
+rank 8, scale 1.0, 16 layers, learning rate 0.0001, batch size 1, two-stage
+fuse-forward packaging, and corpus stayed fixed. The stage loss checkpoints
+were:
+
+| Stage | Step 49 | Step 99 | Step 149 | Step 199 | Step 249 | Step 299 | Step 349 | Step 399 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Syntax, full-sequence | 1.5906 | 1.2166 | 1.2617 | 1.2037 | — | — | — | — |
+| Usage, completion-only | 1.3883 | 1.1212 | 0.8967 | 0.9624 | 0.7877 | 0.6675 | 0.5408 | 0.5352 |
+
+Across the 84-row Grant loss probe, the syntax stage moved loss from 4.8631
+before to 2.1217 after. The usage stage moved it from 1.8960 before to 0.2091
+after. `completion_only_loss=true` is recorded in the training output and the
+filter manifest. The run emitted two warnings for sequences over 2048 tokens;
+the prior audit found one such row (maximum 2148 tokens), and the pinned
+iterator pads to the observed sequence length rather than truncating it.
+
+The filter is installed at
+`~/.llamero/filters/amber-v2-0.2.1.filter`; it was not promoted. The repeated
+greedy held-out runs scored:
+
+| Filter | Grant compile | Grant complete cases | Grant symbol hits | Amber compile | Amber complete cases | Amber symbol hits |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Installed 0.1.0 | 7/37 | 0/37 | 6/107 | 3/5 | 1/5 | 6/16 |
+| 0.2.0 | 3/37 | 1/37 | 16/107 | 0/5 | 0/5 | 6/16 |
+| 0.2.1 completion-only | 2/37 | 2/37 | 15/107 | 0/5 | 0/5 | 7/16 |
+
+All three configurations matched answers and scores on 42/42 questions between
+their two runs. Completion-only loss improved complete Grant cases from 0/37
+to 2/37 and symbol hits from 6/107 to 15/107 compared with 0.1.0, but compiled
+Grant answers fell from 7/37 to 2/37 and Amber compile/complete results fell
+from 3/5 and 1/5 to 0/5 and 0/5. This filter therefore does not meet the
+promotion gate. Several generated answers included Markdown fences or
+explanatory prose in code-only responses; the unchanged evaluator recorded
+those as generated compile failures.
+
+Per-topic scores and raw outputs are in
+`eval_results/round3b-0.2.1-completion-only-summary.md` and its two JSONL
+artifacts. The filter manifest and weight file hashes are in
+`eval_results/amber-v2-0.2.1-manifest.json` and
+`eval_results/amber-v2-0.2.1-sha256.json`; the committed training output log is
+`eval_results/round3b-0.2.1-training.log`.
+
+The next controlled measurement should start the same recipe from the actual
+installed 0.1.0 Amber chain fused into the resident base, then package those
+original stages before the new stages. This changes the starting weights to
+test whether preserving the working Amber adapter avoids its regression while
+the Grant corpus is added.

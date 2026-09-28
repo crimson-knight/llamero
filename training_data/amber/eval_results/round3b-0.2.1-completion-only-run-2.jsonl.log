@@ -1,0 +1,288 @@
+Amber compile harness probes: 2/2
+held-out prompt overlap check: 42 questions checked against 296 training prompts
+1/42 grant_row_scope_customer: compile=false symbols=0/3
+In harness.cr:20:3
+
+ 20 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+2/42 grant_row_missing_context: compile=false symbols=0/2
+In harness.cr:51:29
+
+ 51 | if __FILE__ == $PROGRAM_NAME
+                                  ^
+Error: $global_variables are not supported, use @@class_variables instead
+3/42 grant_row_mismatch: compile=false symbols=0/3
+In harness.cr:22:20
+
+ 22 | def initialize(id:)
+                       ^
+Error: space required before colon in type restriction
+4/42 grant_row_nested: compile=false symbols=0/2
+In harness.cr:18:6
+
+ 18 | Okay, let's craft a Crystal code example demonstrating a nested tenant operation, followed by a separate query targeting a different account.  We'll focus on clarity and idiomatic Crystal style.
+           ^
+Error: Multiple assignment is not allowed for constants
+5/42 grant_row_eager_load: compile=false symbols=0/3
+In harness.cr:30:20
+
+ 30 | def initialize(id:, name:, tenant_id:)
+                       ^
+Error: space required before colon in type restriction
+6/42 grant_row_admin_unscoped: compile=false symbols=0/2
+In harness.cr:21:3
+
+ 21 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+7/42 grant_row_fiber: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:52:3
+
+ 52 | attr_reader :id
+      ^----------
+Error: undefined method 'attr_reader' for Tenant.class
+8/42 grant_schema_global: compile=false symbols=0/3
+In harness.cr:35:6
+
+ 35 | Okay, let's craft a robust and well-documented solution for this scenario. We'll focus on a clear, maintainable, and testable approach, leveraging Crystal's strengths.
+           ^
+Error: Multiple assignment is not allowed for constants
+9/42 grant_schema_create: compile=false symbols=0/4
+In harness.cr:36:3
+
+ 36 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+10/42 grant_schema_list_drop: compile=true symbols=0/3
+11/42 grant_schema_invalid: compile=false symbols=0/2
+In harness.cr:30:6
+
+ 30 | Okay, let's craft a robust solution for handling invalid PostgreSQL schema names when creating tenant schemas, using Crystal and best practices.  I'll focus on clarity, error handling, and a design that anticipates potential issues.
+           ^
+Error: Multiple assignment is not allowed for constants
+12/42 grant_public_sql: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:19:1
+
+ 19 | require "schema"
+      ^
+Error: can't find file 'schema'
+
+If you're trying to require a shard:
+- Did you remember to run `shards install`?
+- Did you make sure you're running the compiler in the same directory as your shard.yml?
+13/42 amber_handler_row_tenant: compile=false symbols=0/4
+In harness.cr:50:12
+
+ 50 | private
+             ^
+Error: unexpected token: "NEWLINE"
+14/42 amber_web_pipeline: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:25:1
+
+ 25 | session :auth_token do
+      ^------
+Error: undefined method 'session' for Amber::DSL::Pipeline (with ... yield) and top-level (current scope)
+15/42 apartment_map_switch: compile=false symbols=0/2
+In harness.cr:50:6
+
+ 50 | Okay, let's tackle this schema switch and tenant state restoration.  I'll provide a robust, idiomatic Crystal code solution, incorporating best practices for schema migrations and tenant state management.
+           ^
+Error: Multiple assignment is not allowed for constants
+16/42 grant_raw_find_count: compile=false symbols=0/3
+In harness.cr:12:3
+
+ 12 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+17/42 grant_raw_result: compile=false symbols=4/4
+In harness.cr:22:3
+
+ 22 | ```ruby
+        ^
+Error: unexpected token: "DELIMITER_START"
+18/42 grant_raw_bound: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:8:7
+
+ 8 | class Raises < Grant::Base; end
+           ^
+Error: Raises is not a class, it's a annotation
+19/42 grant_raw_scoped: compile=false symbols=1/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:10:3
+
+ 10 | include Data::Type.integer_id
+      ^
+Error: can't include dynamically
+20/42 grant_parity_where_missing: compile=false symbols=1/4
+In harness.cr:20:3
+
+ 20 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+21/42 grant_schema_shared_audit: compile=false symbols=1/3
+In harness.cr:19:3
+
+ 19 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+22/42 grant_schema_switch_restore: compile=false symbols=0/3
+In harness.cr:17:33
+
+ 17 | def initialize(schema_client: SchemaClient)
+                                  ^
+Error: space required before colon in type restriction
+23/42 amber_tenant_pipe_unknown: compile=false symbols=0/3
+In harness.cr:15:3
+
+ 15 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+24/42 amber_tenant_pipe_context: compile=false symbols=0/3
+In harness.cr:32:12
+
+ 32 | private
+             ^
+Error: unexpected token: "NEWLINE"
+25/42 amber_tenant_pipe_schema: compile=true symbols=0/3
+26/42 amber_tenant_pipe_routes: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:33:8
+
+ 33 | module TenantResolver
+             ^
+Error: can't declare module dynamically
+27/42 apartment_schema_switch: compile=false symbols=0/2
+In harness.cr:31:6
+
+ 31 | Okay, let's tackle this.  We're moving from Apartment::Tenant.switch (which can be a bit of a global state management issue) to Grant's scoped schema API for a customer invoice lookup.  This is a good move for encapsulation and testability.
+           ^
+Error: Multiple assignment is not allowed for constants
+28/42 apartment_current_schema: compile=false symbols=0/2
+In harness.cr:33:30
+
+ 33 | rescue Grant::TenantNotFound => e
+                                   ^
+Error: expecting any of these tokens: ;, NEWLINE (not '=>')
+29/42 apartment_create_schema: compile=false symbols=0/2
+In harness.cr:25:20
+
+ 25 | def initialize(id: nil, name: "Default Tenant")
+                       ^
+Error: space required before colon in type restriction
+30/42 apartment_drop_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:57:29
+
+ 57 | tenant1 = Apartment::Tenant.new(id: 123)
+                                  ^--
+Error: no parameter named 'id'
+
+Overloads are:
+ - Reference.new()
+31/42 apartment_row_tenant: compile=false symbols=0/3
+In harness.cr:25:6
+
+ 25 | Okay, let's tackle this. We're moving from Apartment's per-request tenant switching to a row-tenanted model with Grant. This is a significant shift, and we need to ensure we're doing it in a way that's maintainable, testable, and leverages Grant's strengths.
+           ^
+Error: Multiple assignment is not allowed for constants
+32/42 grant_raw_select_one: compile=false symbols=3/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:30:10
+
+ 30 | user = db.select_one("SELECT * FROM users WHERE id = ?", user_id)
+             ^-
+Error: undefined local variable or method 'db' for top-level
+33/42 grant_parity_habtm: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro '_grant_register_association'
+
+Code in macro 'belongs_to'
+
+ 75 | _grant_register_association("user", :belongs_to, User, "user_id", "id", nil)
+      ^
+Called macro defined in lib/grant/src/grant/associations.cr:738:3
+
+ 738 | macro _grant_register_association(name, type, target_class, foreign_key, primary_key, through, source = nil)
+
+Which expanded to:
+
+   4 | {
+   5 |   type:         :belongs_to,
+ > 6 |   target_class: User,
+                       ^---
+Error: undefined constant User
+34/42 grant_parity_create_or_find: compile=false symbols=2/3
+In harness.cr:29:3
+
+ 29 | ```crystal
+        ^
+Error: unexpected token: "DELIMITER_START"
+35/42 grant_parity_composite_keys: compile=false symbols=0/3
+In harness.cr:8:8
+
+ 8 | CREATE TABLE users (
+            ^
+Error: unexpected token: "TABLE"
+36/42 grant_parity_raw_sql: compile=false symbols=1/3
+In harness.cr:11:9
+
+ 11 | require 'grant'
+              ^
+Error: unterminated char literal, use double quotes for strings
+37/42 grant_parity_transactions: compile=false symbols=2/3
+In harness.cr:30:6
+
+ 30 | Okay, let's break down the parity guide and how it relates to Grant transactions, and then craft a small Grant transaction example in Crystal.
+           ^
+Error: Multiple assignment is not allowed for constants
+38/42 amber_heldout_route: compile=false symbols=2/3
+In harness.cr:12:7
+
+ 12 | GET "/users", to: "UsersController#index"
+          ^
+Error: unexpected token: "DELIMITER_START"
+39/42 amber_heldout_channel: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:4:7
+
+ 4 | class Crystal < Grant::Base; end
+           ^
+Error: Crystal is not a class, it's a module
+40/42 amber_heldout_schema: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:7:7
+
+ 7 | class Raises < Grant::Base; end
+           ^
+Error: Raises is not a class, it's a annotation
+41/42 amber_heldout_job: compile=false symbols=2/4
+In harness.cr:18:25
+
+ 18 | def initialize(command:, retry_count: 3, enqueue_delay_seconds: 5)
+                            ^
+Error: space required before colon in type restriction
+42/42 amber_heldout_controller: compile=false symbols=1/3
+In harness.cr:20:10
+
+ 20 | private
+             ^
+Error: unexpected token: "NEWLINE"
+compile rate: 2/42
+required-symbol complete cases: 2/42
+artifact: /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/eval_results/round3b-0.2.1-completion-only-run-2.jsonl
