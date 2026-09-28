@@ -40,3 +40,11 @@ nohup crystal-alpha run scripts/eval_amber_grant_filter.cr -- \
 JOB_PID=$!
 printf '%s\n' "$JOB_PID" >"$LOG_PATH.pid"
 printf 'started pid=%s\nlog=%s\nartifact=%s\n' "$JOB_PID" "$LOG_PATH" "$ARTIFACT_PATH"
+if wait "$JOB_PID"; then
+  printf 'completed pid=%s\n' "$JOB_PID"
+else
+  JOB_STATUS=$?
+  printf 'failed pid=%s status=%s\n' "$JOB_PID" "$JOB_STATUS" >&2
+  tail -n 40 "$LOG_PATH" >&2
+  exit "$JOB_STATUS"
+fi
