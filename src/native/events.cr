@@ -183,6 +183,10 @@ module Llamero::Native
     getter iterations : Int32
     getter final_loss : Float64
     getter final_validation_loss : Float64?
+    getter completion_only_loss : Bool
+    getter grant_loss_before : Float64?
+    getter grant_loss_after : Float64?
+    getter grant_probe_rows : Int32?
     getter total_time_ms : Float64
 
     def initialize(raw : JSON::Any)
@@ -192,6 +196,10 @@ module Llamero::Native
       @iterations = raw["iterations"]?.try(&.as_i) || 0
       @final_loss = raw["final_loss"]?.try(&.as_f) || 0.0
       @final_validation_loss = raw["final_validation_loss"]?.try(&.as_f)
+      @completion_only_loss = raw["completion_only_loss"]?.try(&.as_bool) || false
+      @grant_loss_before = raw["grant_loss_before"]?.try(&.as_f)
+      @grant_loss_after = raw["grant_loss_after"]?.try(&.as_f)
+      @grant_probe_rows = raw["grant_probe_rows"]?.try(&.as_i)
       @total_time_ms = raw["total_time_ms"]?.try(&.as_f) || 0.0
     end
   end

@@ -717,6 +717,10 @@ module Llamero::Native
           json.field "steps_per_eval", config.steps_per_eval
           json.field "validation_batches", config.validation_batches
           json.field "method", config.training_method.to_s
+          json.field "completion_only_loss", config.completion_only_loss
+          if loss_probe_data_path = config.loss_probe_data_path
+            json.field "loss_probe_data_path", loss_probe_data_path
+          end
           json.field "dpo_beta", config.dpo_beta
           json.field "kl_beta", config.kl_beta
         end

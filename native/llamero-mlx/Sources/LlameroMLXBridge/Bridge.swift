@@ -45,7 +45,7 @@ private struct LocalOnlyDownloader: MLXLMCommon.Downloader {
     }
 }
 
-private struct LlameroTokenizerBridge: MLXLMCommon.Tokenizer {
+struct LlameroTokenizerBridge: MLXLMCommon.Tokenizer {
     private let upstream: any Tokenizers.Tokenizer
     init(_ upstream: any Tokenizers.Tokenizer) { self.upstream = upstream }
     func encode(text: String, addSpecialTokens: Bool) -> [Int] {
@@ -88,7 +88,8 @@ private func llameroLoraTrainingLoss(
     model: Module,
     inputs: MLXArray,
     targets: MLXArray,
-    lengths: MLXArray
+    lengths: MLXArray,
+    completionMarkerTokens: [Int]? = nil
 ) -> (MLXArray, MLXArray) {
     guard let gemma3 = model as? Gemma3 else {
         return LoRATrain.loss(model: model, inputs: inputs, targets: targets, lengths: lengths)
@@ -96,8 +97,23 @@ private func llameroLoraTrainingLoss(
 
     let logits = gemma3.callAsFunction(inputs, cache: nil).asType(.float32)
     let lengthMask = MLXArray(0 ..< inputs.dim(1))[.newAxis, 0...] .< lengths[0..., .newAxis]
-    let tokenCount = lengthMask.sum()
-    let crossEntropyLoss = (crossEntropy(logits: logits, targets: targets) * lengthMask).sum() / tokenCount
+    let lossMask: MLXArray
+    if let completionMarkerTokens {
+        guard let values = CompletionLossMask.values(
+            inputs: inputs.asArray(Int32.self),
+            lengths: lengths.asArray(Int32.self),
+            batchSize: inputs.dim(0),
+            inputWidth: inputs.dim(1),
+            marker: completionMarkerTokens)
+        else {
+            preconditionFailure("completion-only SFT batch has no valid assistant-response marker")
+        }
+        lossMask = MLXArray(values).reshaped([inputs.dim(0), inputs.dim(1)])
+    } else {
+        lossMask = lengthMask
+    }
+    let tokenCount = lossMask.sum()
+    let crossEntropyLoss = (crossEntropy(logits: logits, targets: targets) * lossMask).sum() / tokenCount
     return (crossEntropyLoss, tokenCount)
 }
 
@@ -167,6 +183,8 @@ struct TrainRequest: Codable {
     // "weighted"/"grpo" (advantage-weighted policy update). Optional for
     // backward compat with callers that predate RL.
     var method: String?
+    var completionOnlyLoss: Bool?
+    var lossProbeDataPath: String?
     var dpoBeta: Float?
     var klBeta: Float?
 
@@ -182,6 +200,8 @@ struct TrainRequest: Codable {
         case stepsPerReport = "steps_per_report"
         case stepsPerEval = "steps_per_eval"
         case validationBatches = "validation_batches"
+        case completionOnlyLoss = "completion_only_loss"
+        case lossProbeDataPath = "loss_probe_data_path"
         case dpoBeta = "dpo_beta"
         case klBeta = "kl_beta"
     }
@@ -953,15 +973,33 @@ public func llamero_mlx_session_train_adapter(
         do {
             let dataURL = URL(fileURLWithPath: request.dataDir)
             let method = request.method ?? "sft"
+            if request.completionOnlyLoss == true && method != "sft" {
+                throw BridgeError(
+                    message: "Completion-only loss is available only for SFT",
+                    code: "invalid_training_request")
+            }
             // SFT reads {"text": …}; DPO/weighted read their own row formats
             // inside RLTrain, so only load the SFT corpus here.
             var train: [String] = []
             var valid: [String] = []
+            var lossProbeData: [String] = []
             if method == "sft" {
                 train = try loadLoRAData(directory: dataURL, name: "train")
                 valid = (try? loadLoRAData(directory: dataURL, name: "valid")) ?? []
                 if train.isEmpty {
                     throw BridgeError(message: "Training dataset at \(request.dataDir) is empty")
+                }
+            }
+            if let lossProbeDataPath = request.lossProbeDataPath {
+                guard method == "sft" else {
+                    throw BridgeError(
+                        message: "A training-loss probe requires SFT data",
+                        code: "invalid_training_request")
+                }
+                lossProbeData = try loadLoRAData(
+                    directory: URL(fileURLWithPath: lossProbeDataPath), name: "train")
+                guard !lossProbeData.isEmpty else {
+                    throw BridgeError(message: "Loss-probe dataset at \(lossProbeDataPath) is empty")
                 }
             }
 
@@ -984,13 +1022,60 @@ public func llamero_mlx_session_train_adapter(
             )
             let trainingData = train
             let validationData = valid
+            let probeData = lossProbeData
 
             let start = Date()
 
-            let result: (finalLoss: Double, validationLoss: Double?) = try await container.perform { context in
+            let result: (
+                finalLoss: Double,
+                validationLoss: Double?,
+                grantLossBefore: Double?,
+                grantLossAfter: Double?
+            ) = try await container.perform { context in
                 let trainingTokenizer = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
                 var lastLoss: Double = 0
                 var lastValidation: Double? = nil
+                let completionMarkerTokens = request.completionOnlyLoss == true
+                    ? trainingTokenizer.encode(text: "<start_of_turn>model\n", addSpecialTokens: false)
+                    : nil
+
+                if request.completionOnlyLoss == true {
+                    guard context.model is Gemma3, let completionMarkerTokens, !completionMarkerTokens.isEmpty else {
+                        throw BridgeError(
+                            message: "Completion-only SFT currently requires a Gemma 3 model with its assistant-turn marker",
+                            code: "completion_marker_missing")
+                    }
+                    for text in trainingData + validationData + probeData {
+                        let tokenIds = trainingTokenizer.encode(text: text, addSpecialTokens: true)
+                        guard CompletionLossMask.containsCompletion(tokenIds, marker: completionMarkerTokens) else {
+                            throw BridgeError(
+                                message: "SFT example is missing the Gemma 3 assistant-turn marker",
+                                code: "completion_marker_missing")
+                        }
+                    }
+                }
+
+                let trainingLoss: LoRATrain.LoraLossFunction = { model, inputs, targets, lengths in
+                    llameroLoraTrainingLoss(
+                        model: model,
+                        inputs: inputs,
+                        targets: targets,
+                        lengths: lengths,
+                        completionMarkerTokens: completionMarkerTokens)
+                }
+
+                let grantLossBefore: Double?
+                if probeData.isEmpty {
+                    grantLossBefore = nil
+                } else {
+                    grantLossBefore = Double(LoRATrain.evaluate(
+                        model: context.model,
+                        dataset: probeData,
+                        loss: trainingLoss,
+                        tokenizer: trainingTokenizer,
+                        batchSize: request.batchSize,
+                        batchCount: 0))
+                }
 
                 // DPO/GRPO references are the FROZEN base — measure before LoRA install.
                 var dpoPrefs: [RLTrain.Pref] = []
@@ -1003,6 +1088,7 @@ public func llamero_mlx_session_train_adapter(
                     RLTrain.cacheWeightedReferences(model: context.model, samples: &weightedSamples)
                 }
 
+                var measuredGrantLossAfter: Double? = nil
                 // Applies (Q)LoRA layers in place and freezes the base weights.
                 // On quantized models the replacement layers are QLoRALinear.
                 let adapter = try LoRAContainer.from(model: context.model, configuration: configuration)
@@ -1034,10 +1120,6 @@ public func llamero_mlx_session_train_adapter(
                             ])
                         }
                     default:
-                        let trainingLoss: LoRATrain.LoraLossFunction = { model, inputs, targets, lengths in
-                            llameroLoraTrainingLoss(
-                                model: model, inputs: inputs, targets: targets, lengths: lengths)
-                        }
                         try LoRATrain.train(
                             model: context.model, train: trainingData, validate: validationData,
                             optimizer: Adam(learningRate: request.learningRate),
@@ -1078,6 +1160,18 @@ public func llamero_mlx_session_train_adapter(
                         }
                     }
 
+                    if probeData.isEmpty {
+                        measuredGrantLossAfter = nil
+                    } else {
+                        measuredGrantLossAfter = Double(LoRATrain.evaluate(
+                            model: context.model,
+                            dataset: probeData,
+                            loss: trainingLoss,
+                            tokenizer: trainingTokenizer,
+                            batchSize: request.batchSize,
+                            batchCount: 0))
+                    }
+
                     // Persist in the mlx_lm adapter layout that
                     // LoRAContainer.from(directory:) round-trips.
                     let outputURL = URL(fileURLWithPath: request.outputDir)
@@ -1096,7 +1190,7 @@ public func llamero_mlx_session_train_adapter(
                     throw error
                 }
 
-                return (lastLoss, lastValidation)
+                return (lastLoss, lastValidation, grantLossBefore, measuredGrantLossAfter)
             }
 
             var completed: [String: Any] = [
@@ -1105,10 +1199,18 @@ public func llamero_mlx_session_train_adapter(
                 "adapter_path": request.outputDir,
                 "iterations": request.iterations,
                 "final_loss": result.finalLoss,
+                "completion_only_loss": request.completionOnlyLoss ?? false,
                 "total_time_ms": Date().timeIntervalSince(start) * 1000,
             ]
             if let validation = result.validationLoss {
                 completed["final_validation_loss"] = validation
+            }
+            if let grantLossBefore = result.grantLossBefore {
+                completed["grant_loss_before"] = grantLossBefore
+                completed["grant_probe_rows"] = lossProbeData.count
+            }
+            if let grantLossAfter = result.grantLossAfter {
+                completed["grant_loss_after"] = grantLossAfter
             }
             sink.emit(completed)
             sink.finish()

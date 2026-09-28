@@ -55,6 +55,22 @@ describe Llamero::Native::NativeEvent do
     completed.finish_reason.should eq("stop")
   end
 
+  it "parses training loss probes and the completion-only flag" do
+    event = frame(%({
+      "event": "training_completed", "adapter_name": "usage",
+      "iterations": 400, "final_loss": 1.25,
+      "completion_only_loss": false,
+      "grant_loss_before": 2.5, "grant_loss_after": 1.75,
+      "grant_probe_rows": 84, "total_time_ms": 900.0
+    })).as(Llamero::Native::TrainingCompletedEvent)
+
+    event.final_loss.should eq(1.25)
+    event.completion_only_loss.should be_false
+    event.grant_loss_before.should eq(2.5)
+    event.grant_loss_after.should eq(1.75)
+    event.grant_probe_rows.should eq(84)
+  end
+
   it "converts error frames into typed errors" do
     event = frame(%({
       "event": "error", "message": "adapter rank mismatch",

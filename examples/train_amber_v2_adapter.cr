@@ -3,7 +3,7 @@
 # and compile/symbol gates run before and after training.
 #
 #   crystal-alpha run examples/train_amber_v2_adapter.cr -- [MODEL] [UNSUP_ITERS]
-#     [SFT_ITERS] [FILTER_VERSION] [FILTER_PATH] [MODEL_PATH]
+#     [SFT_ITERS] [FILTER_VERSION] [FILTER_PATH] [MODEL_PATH] [full-sequence|completion-only]
 require "../src/llamero"
 require "json"
 require "file_utils"
@@ -15,14 +15,28 @@ class AmberV2TrainingRow
   property completion : String = ""
 end
 
+class AmberGrantTrainingPair
+  include JSON::Serializable
+
+  property prompt : String = ""
+  property completion : String = ""
+end
+
 PINNED_MODEL   = "mlx-community/gemma-3-4b-it-4bit@93724907d4ed1745d2fe50baadf3b0b01a65abf2"
 MODEL          = ARGV[0]? || PINNED_MODEL
 UNSUP_ITER     = (ARGV[1]? || "200").to_i
 SFT_ITER       = (ARGV[2]? || "400").to_i
-FILTER_VERSION = ARGV[3]? || "0.2.0"
+FILTER_VERSION = ARGV[3]? || "0.2.1"
 FILTER_PATH    = Path[ARGV[4]? || Path.home.join(".llamero", "filters", "amber-v2-#{FILTER_VERSION}.filter").to_s].expand
 MODEL_PATH     = Path[ARGV[5]? || Path.home.join(".llamero", "models", "mlx-community--gemma-3-4b-it-4bit").to_s].expand
+LOSS_MODE      = ARGV[6]? || "full-sequence"
+unless ["full-sequence", "completion-only"].includes?(LOSS_MODE)
+  abort "loss mode must be full-sequence or completion-only; got #{LOSS_MODE}"
+end
+COMPLETION_ONLY_LOSS = LOSS_MODE == "completion-only"
 CORPUS         = Path[__DIR__].parent.join("training_data", "amber", "amber_v2_sft.jsonl")
+GRANT_PAIRS    = Path[__DIR__].parent.join("training_data", "amber", "grant_tenancy_rawsql_pairs.jsonl")
+PROBE_DIR      = Path[__DIR__].parent.join(".crystal-cache", "round3b", "#{FILTER_VERSION}-grant-loss-probe")
 SYSTEM         = "You are an expert Amber V2 and Grant developer. Answer with correct, idiomatic Crystal code."
 
 abort "refusing to overwrite an existing filter: #{FILTER_PATH}" if File.exists?(FILTER_PATH)
@@ -51,8 +65,21 @@ puts "\ncorpus: #{pairs_count} grounded Amber v2 pairs from #{CORPUS}"
 
 text_ds = Llamero::Native::TrainingDataset.from_text(completions)
 sft_ds = Llamero::Native::TrainingDataset.from_corpus_jsonl(CORPUS, only: :pair, system_prompt: SYSTEM)
+abort "Grant pair corpus missing: #{GRANT_PAIRS}" unless File.exists?(GRANT_PAIRS)
+probe_template = Llamero::Native::TrainingDataset.template_from(MODEL_PATH.to_s) ||
+                 abort("pinned model chat template could not be resolved")
+probe_ds = Llamero::Native::TrainingDataset.new(system_prompt: SYSTEM)
+probe_ds.use_template(probe_template, "model-chat-template-loss-probe")
+File.each_line(GRANT_PAIRS.to_s) do |line|
+  next if line.blank?
+  pair = AmberGrantTrainingPair.from_json(line)
+  probe_ds.add(pair.prompt, pair.completion)
+end
+abort "Grant loss probe needs exactly 84 pairs; found #{probe_ds.size}" unless probe_ds.size == 84
+probe_dir = probe_ds.write(PROBE_DIR, valid_fraction: 0.0)
+puts "Grant loss probe: #{probe_ds.size} rows, template=#{probe_ds.template_source}, path=#{probe_dir}"
 
-def cfg(iters)
+def cfg(iters, loss_probe_path : String, completion_only_loss : Bool)
   c = Llamero::Native::AdapterTrainingConfig.new
   c.iterations = iters
   c.rank = 8
@@ -61,13 +88,35 @@ def cfg(iters)
   c.batch_size = 1
   c.learning_rate = 1e-4
   c.steps_per_report = 50
+  c.loss_probe_data_path = loss_probe_path
+  c.completion_only_loss = completion_only_loss
   c
 end
 
 pipeline = Llamero::Native::StagedPipeline.new(session, "amber-v2-#{FILTER_VERSION}")
-pipeline.unsupervised("syntax", text_ds, cfg(UNSUP_ITER))
-pipeline.supervised("usage", sft_ds, cfg(SFT_ITER))
-puts "\n=== training (unsupervised #{UNSUP_ITER} -> SFT #{SFT_ITER}, fuse-forward) ==="
+pipeline.stage("syntax") do
+  descriptor = session.train_adapter(
+    "amber-v2-#{FILTER_VERSION}-syntax", text_ds,
+    cfg(UNSUP_ITER, probe_dir.to_s, false)
+  ) do |progress|
+    puts "  syntax iteration=#{progress.iteration} loss=#{progress.loss}"
+  end
+  summary = session.last_training || raise "syntax stage completed without a training summary"
+  puts "  syntax final_loss=#{summary.final_loss} Grant loss=#{summary.grant_loss_before} -> #{summary.grant_loss_after} rows=#{summary.grant_probe_rows}"
+  descriptor
+end
+pipeline.stage("usage") do
+  usage_config = cfg(SFT_ITER, probe_dir.to_s, COMPLETION_ONLY_LOSS)
+  descriptor = session.train_adapter(
+    "amber-v2-#{FILTER_VERSION}-usage", sft_ds, usage_config
+  ) do |progress|
+    puts "  usage iteration=#{progress.iteration} loss=#{progress.loss}"
+  end
+  summary = session.last_training || raise "usage stage completed without a training summary"
+  puts "  usage template=#{sft_ds.template_source} completion_only=#{summary.completion_only_loss} final_loss=#{summary.final_loss} Grant loss=#{summary.grant_loss_before} -> #{summary.grant_loss_after} rows=#{summary.grant_probe_rows}"
+  descriptor
+end
+puts "\n=== training (unsupervised #{UNSUP_ITER} -> SFT #{SFT_ITER}, fuse-forward; loss=#{LOSS_MODE}) ==="
 results = pipeline.run { |i, name| puts "  stage #{i}: #{name} (#{Time.local})" }
 
 # Ship the composed adapter as a distributable chain filter.
@@ -86,6 +135,7 @@ filter = Llamero::Native::TrainingFilter.pack_chain(
     "num_layers"              => 16.0,
     "learning_rate"           => 1e-4,
     "batch_size"              => 1.0,
+    "completion_only_loss"    => COMPLETION_ONLY_LOSS ? 1.0 : 0.0,
     "unsupervised_iterations" => UNSUP_ITER.to_f,
     "supervised_iterations"   => SFT_ITER.to_f,
   },

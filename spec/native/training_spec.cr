@@ -25,6 +25,13 @@ private GEMMA_TEMPLATE = "{{ bos_token }}{% for message in messages %}" \
                          "{% else %}{% set role = message['role'] %}{% endif %}" \
                          "<start_of_turn>{{ role }}\n{{ message['content'] }}<end_of_turn>\n{% endfor %}"
 
+private GEMMA3_MODEL_TEMPLATE = "{{ bos_token }}\n{%- if messages[0]['role'] == 'system' -%}" \
+                                "{%- set loop_messages = messages[1:] -%}{%- endif -%}" \
+                                "{%- for message in loop_messages -%}" \
+                                "{{ '<start_of_turn>' + ('model' if message['role'] == 'assistant' else message['role']) + '\\n' }}" \
+                                "{{ message['content'] | trim }}{{ '<end_of_turn>\\n' }}" \
+                                "{%- endfor -%}"
+
 private def model_dir_with_tokenizer_config(dir : String, config) : Path
   FileUtils.mkdir_p(dir)
   File.write(File.join(dir, "tokenizer_config.json"), config.to_json)
@@ -196,9 +203,20 @@ describe Llamero::Native::TrainingDataset do
     )
   end
 
+  it "renders the Gemma 3 text-only template shape with trimmed messages" do
+    pair = Llamero::Native::TrainingDataset::Pair.new("  What is X?  ", "  X is a thing.  ")
+    text = Llamero::Native::TrainingDataset::GEMMA3.call(pair, "  You are terse.  ")
+    text.should eq(
+      "<start_of_turn>user\nYou are terse.\n\nWhat is X?<end_of_turn>\n" \
+      "<start_of_turn>model\nX is a thing.<end_of_turn>\n"
+    )
+  end
+
   it "selects the chat template matching a model id" do
     Llamero::Native::TrainingDataset.template_for("mlx-community/gemma-4-e2b-it-4bit")
       .should eq(Llamero::Native::TrainingDataset::GEMMA)
+    Llamero::Native::TrainingDataset.template_for("mlx-community/gemma-3-4b-it-4bit")
+      .should eq(Llamero::Native::TrainingDataset::GEMMA3)
     Llamero::Native::TrainingDataset.template_for("mlx-community/Qwen3-0.6B-4bit")
       .should eq(Llamero::Native::TrainingDataset::CHATML)
   end
@@ -256,6 +274,26 @@ describe "Llamero::Native::TrainingDataset.template_from" do
       format = Llamero::Native::TrainingDataset.template_from(model_dir).not_nil!
       format.call(pair, nil).should eq(
         "<bos><start_of_turn>user\nWhat is X?<end_of_turn>\n" \
+        "<start_of_turn>model\nX is a thing.<end_of_turn>\n"
+      )
+    ensure
+      FileUtils.rm_rf(dir)
+    end
+  end
+
+  it "uses the Gemma 3 compatibility renderer for the pinned slicing template" do
+    dir = tmp_dir
+    begin
+      model_dir = model_dir_with_tokenizer_config(dir, {
+        "chat_template" => GEMMA3_MODEL_TEMPLATE,
+        "bos_token"     => "<bos>",
+        "eos_token"     => "<end_of_turn>",
+      })
+
+      format = Llamero::Native::TrainingDataset.template_from(model_dir).not_nil!
+      format.should eq(Llamero::Native::TrainingDataset::GEMMA3)
+      format.call(pair, "You are terse.").should eq(
+        "<start_of_turn>user\nYou are terse.\n\nWhat is X?<end_of_turn>\n" \
         "<start_of_turn>model\nX is a thing.<end_of_turn>\n"
       )
     ensure

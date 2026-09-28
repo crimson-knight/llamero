@@ -56,6 +56,14 @@ module Llamero::Native
     # the dataset type by `train_adapter`.
     property training_method : Symbol = :sft
 
+    # When true, SFT loss starts at the assistant response instead of training
+    # the model to reproduce the system and user prompt.
+    property completion_only_loss : Bool = false
+
+    # Optional JSONL directory with a `train.jsonl` set to score before and
+    # after this adapter stage. Used for domain-specific loss probes.
+    property loss_probe_data_path : String?
+
     # DPO temperature / KL strength. Only used when training_method is :dpo.
     property dpo_beta : Float64 = 0.1
 
@@ -72,6 +80,9 @@ module Llamero::Native
       raise ArgumentError.new("iterations must be positive") unless @iterations > 0
       raise ArgumentError.new("batch_size must be positive") unless @batch_size > 0
       raise ArgumentError.new("learning_rate must be positive and finite") unless @learning_rate > 0 && @learning_rate.finite?
+      if @completion_only_loss && @training_method != :sft
+        raise ArgumentError.new("completion_only_loss requires SFT training")
+      end
     end
   end
 
@@ -122,12 +133,32 @@ module Llamero::Native
       end
     }
 
+    # Gemma 3's pinned multimodal model template starts with BOS, then opens the
+    # first user turn. The training tokenizer supplies BOS when encoding.
+    GEMMA3 = ->(pair : Pair, system_prompt : String?) : String {
+      String.build do |text|
+        text << "<start_of_turn>user\n"
+        if system = system_prompt
+          text << system.strip << "\n\n"
+        end
+        text << pair.prompt.strip << "<end_of_turn>\n"
+        text << "<start_of_turn>model\n" << pair.completion.strip << "<end_of_turn>\n"
+      end
+    }
+
     # Picks the chat template that matches a model id, so datasets render
     # with the special tokens the model was instruction-tuned on. Training
     # with the wrong template still converges but the adapter answers
     # poorly at inference time.
     def self.template_for(model_id : String) : Proc(Pair, String?, String)
-      model_id.downcase.includes?("gemma") ? GEMMA : CHATML
+      model = model_id.downcase
+      if model.includes?("gemma-3") || model.includes?("gemma3")
+        GEMMA3
+      elsif model.includes?("gemma")
+        GEMMA
+      else
+        CHATML
+      end
     end
 
     # Builds a rendering proc from the model's own chat template, read from
@@ -147,6 +178,7 @@ module Llamero::Native
       dir = Path[model_dir].expand
       source = chat_template_source(dir)
       return nil unless source
+      return GEMMA3 if gemma3_chat_template?(source)
 
       bos_token, eos_token = special_tokens(dir)
 
@@ -181,6 +213,16 @@ module Llamero::Native
       format
     rescue
       nil
+    end
+
+    # Crinja cannot parse the Python-style slicing and strip calls used by the
+    # Gemma 3 template. Its text-only system/user/assistant path is represented
+    # by GEMMA3 and is token-checked against inference in the MLX bridge tests.
+    private def self.gemma3_chat_template?(source : String) : Bool
+      source.includes?("messages[1:]") &&
+        source.includes?("bos_token") &&
+        source.includes?("<start_of_turn>") &&
+        source.includes?("message['role'] == 'assistant'")
     end
 
     # Pulls the raw Jinja chat template out of the model directory, checking

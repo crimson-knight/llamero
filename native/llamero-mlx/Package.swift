@@ -43,7 +43,10 @@ let package = Package(
         ),
         .testTarget(
             name: "LlameroMLXBridgeTests",
-            dependencies: ["LlameroMLXBridge"]
+            dependencies: [
+                "LlameroMLXBridge",
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ]
         )
     ]
 )
