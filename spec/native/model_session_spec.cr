@@ -15,6 +15,25 @@ ensure
   FileUtils.rm_rf(dir) if dir
 end
 
+private def with_chain_filter(&)
+  root = File.join(Dir.tempdir, "llamero-chain-#{Random::Secure.hex(6)}")
+  list_of_stage_dirs = (0..1).map do |stage_index|
+    dir = File.join(root, "source-#{stage_index}")
+    Dir.mkdir_p(dir)
+    File.write(File.join(dir, "adapters.safetensors"), "fake-lora-weights-#{stage_index}")
+    File.write(File.join(dir, "adapter_config.json"), %({"num_layers": 8, "lora_parameters": {"rank": 8, "scale": 1.0}}))
+    dir
+  end
+  filter = Llamero::Native::TrainingFilter.pack_chain(
+    adapter_dirs: list_of_stage_dirs, dest: File.join(root, "chain.filter"),
+    name: "chain", version: "0.1.0", base_model: "test-model",
+    lora: Llamero::Native::TrainingFilter::LoRASpec.new(rank: 8, scale: 1.0, num_layers: 8),
+    provenance: Llamero::Native::TrainingFilter::Provenance.new(methods: ["syntax", "usage"]))
+  yield filter
+ensure
+  FileUtils.rm_rf(root) if root
+end
+
 describe Llamero::Native::ModelSession do
   describe "state transitions" do
     it "starts unloaded and transitions to loaded" do
@@ -148,6 +167,69 @@ describe Llamero::Native::ModelSession do
         session.active_adapter_stack.empty?.should be_true
         session.chat([Llamero::Message.user("still alive?")]).content.should contain("mock response")
       end
+    end
+  end
+
+  describe "chain filter activation" do
+    it "fuses every stage before the last and installs the final stage live" do
+      with_chain_filter do |filter|
+        bridge = Llamero::Native::MockBridge.new
+        runtime = build_runtime(bridge)
+        session = runtime.start_session
+        session.load_model
+
+        session.activate_filter(filter, fuse: true)
+
+        requests = bridge.list_of_adapter_activation_requests
+        requests.map(&.list_of_adapter_names).should eq([["chain-stage-0"], ["chain-stage-1"]])
+        requests.map(&.fuse).should eq([true, false])
+        requests.map(&.cumulative).should eq([true, false])
+        session.active_adapter_stack.slots.map(&.name).should eq(["chain-stage-1"])
+        session.active_adapters_fused?.should be_true
+      end
+    end
+
+    it "reloads the base before the next activation because earlier stages are fused" do
+      with_chain_filter do |filter|
+        runtime = build_runtime
+        session = runtime.start_session
+        session.load_model
+        session.activate_filter(filter)
+        load_count_after_activation = session.load_count
+
+        session.deactivate_adapters
+
+        session.load_count.should eq(load_count_after_activation + 1)
+        session.active_adapter_stack.empty?.should be_true
+      end
+    end
+
+    it "fuses every stage permanently when a training base is requested" do
+      with_chain_filter do |filter|
+        bridge = Llamero::Native::MockBridge.new
+        runtime = build_runtime(bridge)
+        session = runtime.start_session
+        session.load_model
+
+        session.activate_filter(filter, cumulative: true)
+
+        bridge.list_of_adapter_activation_requests.map(&.cumulative).should eq([true, true])
+        session.active_adapter_stack.empty?.should be_true
+        session.active_adapters_fused?.should be_false
+      end
+    end
+  end
+
+  describe "loss evaluation" do
+    it "requires the real MLX bridge" do
+      session = build_runtime.start_session
+      session.load_model
+
+      error = expect_raises(Llamero::Native::BridgeUnavailableError) do
+        session.evaluate_loss("grant-rows", "/tmp/grant-rows", completion_only_loss: true)
+      end
+
+      error.message.not_nil!.should contain("real MLX bridge")
     end
   end
 

@@ -334,9 +334,16 @@ module Llamero::Native
     # "load this library's working knowledge for the session" path. `fuse: true`
     # bakes it into the resident base at full throughput.
     #
-    # A fuse-forward CHAIN filter is always reconstructed by reloading the base
-    # and fusing each stage forward in order (the only correct way to apply a
-    # multi-stage composition); `fuse`/`cumulative` are ignored for chains.
+    # A fuse-forward CHAIN filter is reconstructed exactly as it was trained:
+    # the base is reloaded, every stage before the last is fused forward in
+    # order (each later stage trained on that re-quantized base), and the
+    # final stage is installed as live LoRA layers, which is the state its
+    # training loss was measured in. Fusing the final stage too re-quantizes
+    # its delta to 4 bits; for small-scale adapters that rounds most of the
+    # learned update away (see
+    # training_data/amber/eval_results/round3b-train-serve-loss.md), so
+    # `fuse` is ignored for chains. Pass `cumulative: true` to fuse every
+    # stage permanently instead, as a base for training further stages.
     def activate_filter(
       filter : TrainingFilter,
       fuse : Bool = false,
@@ -346,14 +353,21 @@ module Llamero::Native
       if filter.manifest.chain?
         load_model
         key_remaps = [] of String
-        filter.stage_dirs.each_with_index do |dir, i|
-          stage_name = "#{filter.name}-stage-#{i}"
+        list_of_stage_dirs = filter.stage_dirs
+        final_stage_index = list_of_stage_dirs.size - 1
+        list_of_stage_dirs.each_with_index do |dir, stage_index|
+          stage_name = "#{filter.name}-stage-#{stage_index}"
           @registry.register(stage_name, dir)
+          is_final_live_stage = stage_index == final_stage_index && !cumulative
           activate_adapters(
-            AdapterStack.additive([AdapterSlot.new(stage_name)]), fuse: true, cumulative: true)
+            AdapterStack.additive([AdapterSlot.new(stage_name)]),
+            fuse: !is_final_live_stage, cumulative: !is_final_live_stage)
           key_remaps.concat(@last_adapter_key_remaps)
         end
         @last_adapter_key_remaps = key_remaps
+        # The earlier stages are baked into the resident base, so the next
+        # activation must reload it rather than only unloading the live stage.
+        @active_adapters_fused = !cumulative
       else
         slot = install_filter(filter, scale)
         activate_adapters(AdapterStack.additive([slot]), fuse: fuse, cumulative: cumulative)

@@ -9,18 +9,18 @@ module Llamero::Native
   # inspect per-session state (load counts, active adapters) to verify the
   # "no base model reload on adapter change" invariant.
   #
-  # ```crystal
+  # ```
   # bridge = Llamero::Native::MockBridge.new
   # bridge.scripted_responses << %({"name":"Ada","age":36})
   # runtime = Llamero::Native::MLXRuntime.new(model_id: "test-model", bridge: bridge)
   # ```
   class MockBridge < Bridge
     # Deterministic metrics every mock load/generation reports.
-    LOAD_TIME_MS    = 120.0
-    MEMORY_BYTES    = 512_i64 * 1024 * 1024
-    TOKENS_PER_SEC  =  42.0
-    TTFT_MS         =   5.0
-    TOTAL_TIME_MS   = 100.0
+    LOAD_TIME_MS   = 120.0
+    MEMORY_BYTES   = 512_i64 * 1024 * 1024
+    TOKENS_PER_SEC =  42.0
+    TTFT_MS        =   5.0
+    TOTAL_TIME_MS  = 100.0
 
     private class SessionState
       property runtime_handle : Int64
@@ -33,6 +33,13 @@ module Llamero::Native
       def initialize(@runtime_handle : Int64, @model_id : String)
       end
     end
+
+    # One adapter activation as the bridge received it.
+    record AdapterActivationRequest, list_of_adapter_names : Array(String), fuse : Bool, cumulative : Bool
+
+    # Every adapter activation in call order, so specs can assert which
+    # stages were fused and which were installed live.
+    getter list_of_adapter_activation_requests = [] of AdapterActivationRequest
 
     # Queue of canned response texts; each generation shifts one off. When
     # empty, a deterministic default response is generated instead.
@@ -121,13 +128,18 @@ module Llamero::Native
 
       stack = JSON.parse(stack_json)
       names = stack["slots"]?.try(&.as_a.map { |slot| slot["name"].as_s }) || [] of String
+      fuse = !names.empty? && (stack["fuse"]?.try(&.as_bool) || false)
+      cumulative = fuse && (stack["cumulative"]?.try(&.as_bool) || false)
+      @list_of_adapter_activation_requests << AdapterActivationRequest.new(names, fuse, cumulative)
       state.active_adapter_names = names
       state.adapter_stack_id = stack["stack_id"]?.try(&.as_s) || "base"
 
       emit(on_event, state, session, {
-        "event" => "adapter_activated",
-        "adapter_names" => names,
+        "event"               => "adapter_activated",
+        "adapter_names"       => names,
         "base_model_reloaded" => false,
+        "fused"               => fuse,
+        "cumulative"          => cumulative,
       })
     end
 

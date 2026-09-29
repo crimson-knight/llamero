@@ -62,7 +62,8 @@ abort "no MLX bridge — build native/llamero-mlx (./build.sh) first" unless bri
 runtime = Llamero::Native::MLXRuntime.new(model_id: MODEL, model_path: MODEL_PATH.to_s, bridge: bridge)
 session = runtime.start_session
 if initial_filter = INITIAL_FILTER
-  session.activate_filter(initial_filter, fuse: true)
+  # Fuse every seed stage permanently: the new stages train on this base.
+  session.activate_filter(initial_filter, cumulative: true)
   puts "fused initial filter #{initial_filter.id} before Grant training"
 else
   session.load_model
