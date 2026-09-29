@@ -258,3 +258,31 @@ installed 0.1.0 Amber chain fused into the resident base, then package those
 original stages before the new stages. This changes the starting weights to
 test whether preserving the working Amber adapter avoids its regression while
 the Grant corpus is added.
+
+#### Train/serve gap: the final fuse erased the adapter (2026-09-29)
+
+The low training loss did not reach inference because `activate_filter`
+fused the final chain stage into the 4-bit weights. A new bridge entry point,
+`llamero_mlx_session_evaluate_loss`, measured the 84 Grant rows at each step
+for 0.2.1: base 2.9885; stage 0 fused 1.8960 (the training "before" value);
+stage 1 live 0.2091 (the training "after" value, exactly); stage 1 fused
+1.3471, which is what the eval path used. Layer indices (18-33), all seven
+projections, the identity key remap, the saved checkpoint, and the scale
+(1.0) were therefore correct, and applying stage 1 alone live gave 0.2336,
+so chain order was not the cause. The cause is re-quantization: at scale 1.0
+the learned delta is mostly below half a 4-bit step, so rounding removes it.
+Installed 0.1.0 used scale 10 (its manifest says 1.0) and survived fusion.
+
+`ModelSession#activate_filter` now fuses every stage before the last, as
+training did, and installs the final stage live; `cumulative: true` still
+fuses all stages for fuse-forward training. With that path, 0.2.1 scored 9/37
+Grant compiles (from 2/37) and 28/107 symbol hits (from 15/107) without
+retraining, and 0.2.3 reproduced its training loss (0.1148) exactly.
+
+Retrained filters: 0.2.3 (0.1.0 seed, syntax 200, usage 400) scored Grant
+9/37 compile, 2/37 complete, 30/107 symbols, Amber 1/5; 0.2.4 (usage 150)
+scored Grant 17/37 compile, 0/37 complete, 15/107 symbols, Amber 1/5. The
+0.2.4 compile gain is mostly memorized boilerplate. Neither meets the gate
+(Amber regression is below 3/5), so neither is promoted. See
+`eval_results/round3b-train-serve-loss.md` and
+`eval_results/round3b-0.2.3-0.2.4-summary.md`.

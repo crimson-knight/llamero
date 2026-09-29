@@ -1,0 +1,249 @@
+Amber compile harness probes: 2/2
+held-out prompt overlap check: 42 questions checked against 296 training prompts
+1/42 grant_row_scope_customer: compile=true symbols=1/3
+2/42 grant_row_missing_context: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'macro_4934425984'
+
+Code in /opt/homebrew/Cellar/agent-crystal/HEAD-9c1e8ec/share/agent-crystal/src/yaml/from_yaml.cr:296:3
+
+ 296 | {% begin %}
+       ^
+Called macro defined in /opt/homebrew/Cellar/agent-crystal/HEAD-9c1e8ec/share/agent-crystal/src/yaml/from_yaml.cr:296:3
+
+ 296 | {% begin %}
+
+Which expanded to:
+
+    9 |       
+   10 |         begin
+ > 11 |           return JSON::Any.new(ctx, node)
+                                   ^--
+Error: wrong number of arguments for 'JSON::Any.new' (given 2, expected 1)
+
+Overloads are:
+ - JSON::Any.new(raw : Type)
+ - JSON::Any.new(raw : Int)
+ - JSON::Any.new(raw : Float)
+ - JSON::Any.new(pull : JSON::PullParser)
+3/42 grant_row_mismatch: compile=true symbols=1/3
+4/42 grant_row_nested: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:19:11
+
+ 19 | include Grant::Base
+              ^----------
+Error: Grant::Base is not a module, it's a class
+5/42 grant_row_eager_load: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:19:15
+
+ 19 | TenantInvoice.find_by_tenant_id(12).select
+                    ^----------------
+Error: undefined method 'find_by_tenant_id' for TenantInvoice.class
+6/42 grant_row_admin_unscoped: compile=true symbols=1/2
+7/42 grant_row_fiber: compile=true symbols=1/3
+8/42 grant_schema_global: compile=true symbols=1/3
+9/42 grant_schema_create: compile=true symbols=1/4
+10/42 grant_schema_list_drop: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:15:38
+
+ 15 | Parity::Schema.find_by(name: "acme").drop
+                                           ^---
+Error: undefined method 'drop' for Nil[33;1m (compile-time type is (Parity::Schema | Nil))[39;22m
+11/42 grant_schema_invalid: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:16:50
+
+ 16 | Grant::SchemaTenant.with("acme") { SchemaInvoice.unserialized }
+                                                       ^-----------
+Error: undefined method 'unserialized' for SchemaInvoice.class
+12/42 grant_public_sql: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:14:12
+
+ 14 | PublicPlan.find_by_plan_code("acme")
+                 ^----------------
+Error: undefined method 'find_by_plan_code' for PublicPlan.class
+13/42 amber_handler_row_tenant: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:5:16
+
+ 5 | class Account< Amber::WebSockets::Handler
+                    ^-------------------------
+Error: undefined constant Amber::WebSockets::Handler
+14/42 amber_web_pipeline: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:15:1
+
+ 15 | require "grant"
+      ^
+Error: can't require dynamically
+15/42 apartment_map_switch: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:29:35
+
+ 29 | class SchemaInvoiceInvoiceSchema< Schema::Definition
+                                        ^-----------------
+Error: undefined constant Schema::Definition
+16/42 grant_raw_find_count: compile=true symbols=1/3
+17/42 grant_raw_result: compile=true symbols=1/4
+18/42 grant_raw_bound: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:18:26
+
+ 18 | ScopedInvoice.connection.select_value("SELECT id FROM invoices WHERE id = ?", ["INV-1"], column_type: :Int64)
+                               ^-----------
+Error: no parameter named 'column_type'
+
+Overloads are:
+ - Grant::Connection#select_value(sql : String, binds : Array(Grant::Columns::Type) = [] of Grant::Columns::Type)
+19/42 grant_raw_scoped: compile=false symbols=1/4
+In harness.cr:96:1
+Error: expecting identifier 'end', not 'EOF'
+20/42 grant_parity_where_missing: compile=true symbols=0/4
+21/42 grant_schema_shared_audit: compile=true symbols=0/3
+22/42 grant_schema_switch_restore: compile=true symbols=0/3
+23/42 amber_tenant_pipe_unknown: compile=false symbols=0/3
+In harness.cr:33:39
+
+ 33 | render json: {status: "created"}, 201
+                                        ^
+Error: expected named argument, not 201
+24/42 amber_tenant_pipe_context: compile=true symbols=0/3
+25/42 amber_tenant_pipe_schema: compile=false symbols=1/3
+In harness.cr:82:1
+Error: expecting identifier 'end', not 'EOF'
+26/42 amber_tenant_pipe_routes: compile=false symbols=1/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:14:1
+
+ 14 | require "amber"
+      ^
+Error: can't require dynamically
+27/42 apartment_schema_switch: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:22:72
+
+ 22 | TenantInvoice.find_by(tenant_id: 12_i64, invoice_number: "INV-2026").first
+                                                                           ^----
+Error: undefined method 'first' for Nil[33;1m (compile-time type is (TenantInvoice | Nil))[39;22m
+28/42 apartment_current_schema: compile=true symbols=1/2
+29/42 apartment_create_schema: compile=true symbols=0/2
+30/42 apartment_drop_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:16:9
+
+ 16 | table invoices
+            ^-------
+Error: undefined local variable or method 'invoices' for ApartmentInvoice::Tenant.class
+31/42 apartment_row_tenant: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:23:35
+
+ 23 | class ApartmentInvoiceController< HTTP::Controller::Base
+                                        ^---------------------
+Error: undefined constant HTTP::Controller::Base
+32/42 grant_raw_select_one: compile=true symbols=1/3
+33/42 grant_parity_habtm: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'belongs_to'
+
+Code in harness.cr:18:5
+
+ 18 | belongs_to :category, class_name: "Scryte::Category", foreign_key: :category_id
+      ^
+Called macro defined in lib/grant/src/grant/associations.cr:108:3
+
+ 108 | macro belongs_to(model, **options)
+
+Which expanded to:
+
+   52 |   clear_nullable_attribute("category_id")
+   53 | else
+ > 54 |   converted_key = Grant::Type.convert_type(parent_key, typeof(self.category_id))
+                                                                           ^----------
+Error: undefined method 'category_id' for Scryte::Post
+
+Did you mean 'category'?
+34/42 grant_parity_create_or_find: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:17:8
+
+ 17 | Parity.delete_table
+             ^-----------
+Error: undefined method 'delete_table' for Parity.class
+35/42 grant_parity_composite_keys: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:16:20
+
+ 16 | composite = Parity.find_by_parity_key("A123", "B456")
+                         ^-----------------
+Error: undefined method 'find_by_parity_key' for Parity.class
+36/42 grant_parity_raw_sql: compile=true symbols=0/3
+37/42 grant_parity_transactions: compile=true symbols=0/3
+38/42 amber_heldout_route: compile=false symbols=0/3
+In harness.cr:14:54
+
+ 14 | json(users: JSON::Any.new(users.map(&.to_h)) of String))
+                                                   ^
+Error: expecting token ')', not 'of'
+39/42 amber_heldout_channel: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:4:1
+
+ 4 | class LobbyChannel< Amber::WebSockets::Channel
+     ^
+Error: abstract `def Amber::WebSockets::Channel#handle_message(client_socket, msg)` must be implemented by LobbyChannel
+40/42 amber_heldout_schema: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'string'
+
+Code in harness.cr:7:3
+
+ 7 | string :email, required: true
+     ^
+Called macro defined in lib/amber/src/amber/schema/dsl.cr:5:5
+
+ 5 | macro string(name, required = false, **options)
+
+Which expanded to:
+
+ > 1 | field(":email", String, true, )
+       ^----
+Error: wrong number of arguments for macro 'field' (given 3, expected 2)
+41/42 amber_heldout_job: compile=false symbols=3/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:24:39
+
+ 24 | ProcessOrderJob.new(order_id: 99_i64).enqueue(
+                                            ^------
+Error: no parameter named 'retries'
+
+Overloads are:
+ - Amber::Jobs::Job#enqueue(queue : String | ::Nil = nil, delay : Time::Span | ::Nil = nil)
+42/42 amber_heldout_controller: compile=true symbols=2/3
+compile rate: 18/42
+required-symbol complete cases: 0/42
+artifact: /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/eval_results/round3b-0.2.4-run-1.jsonl

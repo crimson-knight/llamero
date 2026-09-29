@@ -1,0 +1,24 @@
+fused initial filter amber-v2@0.1.0 before Grant training
+
+corpus: 296 grounded Amber v2 pairs from /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/amber_v2_sft.jsonl
+Grant loss probe: 84 rows, template=model-chat-template-loss-probe, path=/Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/.crystal-cache/round3b/0.2.4-grant-loss-probe
+
+=== training (unsupervised 200 -> SFT 150, fuse-forward; loss=completion-only) ===
+  stage 0: syntax (2026-09-29 01:59:07 -04:00)
+  syntax iteration=49 loss=0.5715916752815247
+  syntax iteration=99 loss=0.4690077006816864
+  syntax iteration=149 loss=0.31093207001686096
+  syntax iteration=199 loss=0.3617001175880432
+  syntax final_loss=0.3617001175880432 Grant loss=3.864391326904297 -> 1.2700138092041016 rows=84
+  stage 1: usage (2026-09-29 02:13:11 -04:00)
+  usage iteration=49 loss=0.4041523337364197
+  usage iteration=99 loss=0.2930945158004761
+  usage iteration=149 loss=0.2370915710926056
+  usage template=model-chat-template completion_only=true final_loss=0.2370915710926056 Grant loss=2.3756368160247803 -> 0.34558868408203125 rows=84
+
+shipped amber-v2@0.2.4 (chain of 4) -> /Users/crimsonknight/.llamero/filters/amber-v2-0.2.4.filter
+trained on 296 grounded pairs from /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/amber_v2_sft.jsonl using mlx-community/gemma-3-4b-it-4bit@93724907d4ed1745d2fe50baadf3b0b01a65abf2
+[WARNING] Some sequences are longer than 2048 tokens.
+Consider pre-splitting your data to save memory.
+[WARNING] Some sequences are longer than 2048 tokens.
+Consider pre-splitting your data to save memory.
