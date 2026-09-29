@@ -1,0 +1,318 @@
+Amber compile harness probes: 2/2
+held-out prompt overlap check: 42 questions checked against 296 training prompts
+1/42 grant_row_scope_customer: compile=false symbols=0/3
+In harness.cr:115:1
+Error: unexpected token: EOF
+2/42 grant_row_missing_context: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:6:23
+
+ 6 | class InvoiceService< Grant::Service
+                           ^-------------
+Error: undefined constant Grant::Service
+3/42 grant_row_mismatch: compile=false symbols=0/3
+In harness.cr:15:49
+
+ 15 | def create(tenant : Tenant) -> Grant::Response
+                                                    ^
+Error: expecting token '.', not 'NEWLINE'
+4/42 grant_row_nested: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'finished'
+
+Code in macro 'inherited'
+
+ 178 | macro finished
+       ^
+Called macro defined in macro 'inherited'
+
+ 178 | macro finished
+
+Which expanded to:
+
+    8 | # user.save        # INSERTs the row
+    9 | # ```
+ > 10 | def initialize(**args)
+            ^---------
+Error: this 'initialize' doesn't explicitly initialize instance variable '@tenant_id' of Tenant, rendering it nilable
+
+The instance variable '@tenant_id' is initialized in other 'initialize' methods,
+and by not initializing it here it's not clear if the variable is supposed
+to be nilable or if this is a mistake.
+
+To fix this error, either assign nil to it here:
+
+  @tenant_id = nil
+
+Or declare it as nilable outside at the type level:
+
+  @tenant_id : (Int64)?
+5/42 grant_row_eager_load: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:28:29
+
+ 28 | Account.where(active: true).select(
+                                  ^-----
+Error: no overload matches 'Grant::Query::Builder(Account)#select' with types String, String, String
+
+Overloads are:
+ - Grant::Query::Builder(Model)#select()
+ - Grant::Query::Builder(Model)#select(*columns : Symbol)
+ - Enumerable(T)#select(& : (T ->))
+ - Enumerable(T)#select(type : U.class) forall U
+ - Enumerable(T)#select(pattern)
+6/42 grant_row_admin_unscoped: compile=false symbols=0/2
+In harness.cr:9:24
+
+ 9 | tenant_ids = Array(tenant_data.map(&.id))
+                        ^
+Error: unexpected token: "tenant_data"
+7/42 grant_row_fiber: compile=false symbols=0/3
+In harness.cr:9:50
+
+ 9 | Invoice.all_for(@tenant_id).each do |invoice : Invoice
+                                                  ^
+Error: expecting ',' or '|', not :
+8/42 grant_schema_global: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:43:11
+
+ 43 | Product.create!(name: "Widget") { |p| p.active = true }
+              ^------
+Error: 'Product.create!' is not expected to be invoked with a block, but a block was given
+9/42 grant_schema_create: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:3:22
+
+ 3 | class InvoiceSchema< Grant::Schema::Definition
+                          ^------------------------
+Error: undefined constant Grant::Schema::Definition
+10/42 grant_schema_list_drop: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:4:28
+
+ 4 | class TenantSchemaManager< Grant::Migration
+                                ^---------------
+Error: undefined constant Grant::Migration
+
+Did you mean 'Grant::Migrator'?
+11/42 grant_schema_invalid: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:20:1
+
+ 20 | Grant::Schema.register(InvalidSchema) do |client_data|
+      ^------------
+Error: undefined constant Grant::Schema
+12/42 grant_public_sql: compile=false symbols=0/4
+In harness.cr:14:35
+
+ 14 | .column("created_at", Time?): last_updated => :created_at
+                                  ^
+Error: unexpected token: ":"
+13/42 amber_handler_row_tenant: compile=false symbols=0/4
+In harness.cr:6:54
+
+ 6 | def resolve(context : Grant::CallContext) -> String?
+                                                        ^
+Error: expecting token '.', not '?'
+14/42 amber_web_pipeline: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:16:1
+
+ 16 | session do |s|
+      ^------
+Error: undefined local variable or method 'session' for Amber::DSL::Pipeline (with ... yield) and top-level (current scope)
+15/42 apartment_map_switch: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:19:21
+
+ 19 | class InvoiceQuery< Grant::Query
+                          ^-----------
+Error: Grant::Query is not a class, it's a module
+16/42 grant_raw_find_count: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:21:56
+
+ 21 | post = Post.create!(title: "My post", created_at: Time.now)
+                                                             ^--
+Error: undefined method 'now' for Time.class
+
+Did you mean 'new'?
+17/42 grant_raw_result: compile=false symbols=2/4
+In harness.cr:26:5
+
+ 26 | end else
+          ^
+Error: expecting token 'EOF', not 'else'
+18/42 grant_raw_bound: compile=false symbols=0/3
+In harness.cr:22:60
+
+ 22 | where(id : Int64, bound : BDB) == bound && id == Int64(changes["id"])
+                                                             ^
+Error: unexpected token: "changes"
+19/42 grant_raw_scoped: compile=false symbols=1/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:30:9
+
+ 30 | Invoice.raw(sql).select
+              ^--
+Error: undefined method 'raw' for Invoice.class
+20/42 grant_parity_where_missing: compile=false symbols=1/4
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'method_missing'
+
+Code in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+       ^
+Called macro defined in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+
+Which expanded to:
+
+ > 1 | @query.missing
+              ^------
+Error: undefined method 'missing' for Grant::Query::Builder(Orders)
+21/42 grant_schema_shared_audit: compile=true symbols=1/3
+22/42 grant_schema_switch_restore: compile=true symbols=0/3
+23/42 amber_tenant_pipe_unknown: compile=false symbols=0/3
+In harness.cr:28:48
+
+ 28 | report = Report.find(validated["report_id"]!.to_i64)
+                                                 ^
+Error: expecting token ')', not '!'
+24/42 amber_tenant_pipe_context: compile=true symbols=1/3
+25/42 amber_tenant_pipe_schema: compile=false symbols=0/3
+In harness.cr:16:7
+
+ 16 | ))
+      ^
+Error: expecting token '}', not ')'
+26/42 amber_tenant_pipe_routes: compile=false symbols=1/2
+Showing last frame. Use --error-trace for full trace.
+
+In lib/amber/src/amber/pipes/cors.cr:29:9
+
+ 29 | @origins : OriginType = ["*", %r()],
+      ^-------
+Error: instance variable '@origins' of Amber::Pipe::CORS must be Array(Regex | String), not Array(String)
+27/42 apartment_schema_switch: compile=false symbols=0/2
+In harness.cr:24:71
+
+ 24 | def find_invoice(invoice_number : String) : Grant::Result(Invoice | nil)
+                                                                          ^
+Error: unexpected token: "nil"
+28/42 apartment_current_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:6:23
+
+ 6 | class SchemaImporter< Grant::Migration
+                           ^---------------
+Error: undefined constant Grant::Migration
+
+Did you mean 'Grant::Migrator'?
+29/42 apartment_create_schema: compile=true symbols=0/2
+30/42 apartment_drop_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:30:8
+
+ 30 | Tenant.drop(id: 10_i64)
+             ^---
+Error: undefined method 'drop' for Tenant.class
+31/42 apartment_row_tenant: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'method_missing'
+
+Code in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+       ^
+Called macro defined in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+
+Which expanded to:
+
+ > 1 | @query.default
+              ^------
+Error: undefined method 'default' for Grant::Query::Builder(Apartment)
+32/42 grant_raw_select_one: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:7:3
+
+ 7 | connection do |conn|
+     ^---------
+Error: 'Order.connection' is not expected to be invoked with a block, but a block was given
+33/42 grant_parity_habtm: compile=false symbols=0/3
+In harness.cr:72:1
+Error: unexpected token: EOF
+34/42 grant_parity_create_or_find: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:20:27
+
+ 20 | new_users = User.new_many(raw_params["payload"])
+                                ^---------
+Error: undefined local variable or method 'raw_params' for top-level
+35/42 grant_parity_composite_keys: compile=true symbols=2/3
+36/42 grant_parity_raw_sql: compile=false symbols=1/3
+In harness.cr:21:5
+
+ 21 | end else
+          ^
+Error: expecting token 'EOF', not 'else'
+37/42 grant_parity_transactions: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:16:17
+
+ 16 | Payment.create!(payment_params)
+                      ^-------------
+Error: undefined local variable or method 'payment_params' for top-level
+38/42 amber_heldout_route: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:11:5
+
+ 11 | def index
+          ^----
+Error: can't declare def dynamically
+39/42 amber_heldout_channel: compile=true symbols=1/3
+40/42 amber_heldout_schema: compile=false symbols=2/3
+In harness.cr:15:1
+
+ 15 | )
+      ^
+Error: expecting token '}', not ')'
+41/42 amber_heldout_job: compile=false symbols=2/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:21:55
+
+ 21 | ImportDataJob.new(file_path: "/var/uploads/data.csv").enqueue(
+                                                            ^------
+Error: no parameters named 'retries', 'enqueue_in'
+
+Overloads are:
+ - Amber::Jobs::Job#enqueue(queue : String | ::Nil = nil, delay : Time::Span | ::Nil = nil)
+42/42 amber_heldout_controller: compile=true symbols=2/3
+compile rate: 7/42
+required-symbol complete cases: 0/42
+artifact: /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/eval_results/round3b-0.1.0-live-final-run-1.jsonl

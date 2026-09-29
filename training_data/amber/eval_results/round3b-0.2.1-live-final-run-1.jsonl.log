@@ -1,0 +1,401 @@
+Amber compile harness probes: 2/2
+held-out prompt overlap check: 42 questions checked against 296 training prompts
+crystal-run-eval_amber_grant_filter.tmp(32271) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+1/42 grant_row_scope_customer: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:18:19
+
+ 18 | active_invoices = Grant::TenantInvoice.where(active: true).select
+                        ^-------------------
+Error: undefined constant Grant::TenantInvoice
+crystal-run-eval_amber_grant_filter.tmp(32640) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+2/42 grant_row_missing_context: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:5:7
+
+ 5 | class Raises < Grant::Base; end
+           ^
+Error: Raises is not a class, it's a annotation
+crystal-run-eval_amber_grant_filter.tmp(32957) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+3/42 grant_row_mismatch: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:23:62
+
+ 23 | raise Grant::Transaction::Rollback.new(invoice) if invoice.failed?
+                                                                 ^------
+Error: undefined method 'failed?' for TenantInvoice
+crystal-run-eval_amber_grant_filter.tmp(33919) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+4/42 grant_row_nested: compile=false symbols=1/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:21:15
+
+ 21 | Grant::Tenant.create_nested(account_id, "acme")
+                    ^------------
+Error: undefined method 'create_nested' for Grant::Tenant.class
+crystal-run-eval_amber_grant_filter.tmp(34230) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+5/42 grant_row_eager_load: compile=true symbols=0/3
+crystal-run-eval_amber_grant_filter.tmp(34732) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+6/42 grant_row_admin_unscoped: compile=false symbols=2/2
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'override_query_method'
+
+Code in lib/grant/src/grant/scoping.cr:425:5
+
+ 425 | override_query_method update_all
+       ^
+Called macro defined in lib/grant/src/grant/scoping.cr:344:5
+
+ 344 | macro override_query_method(method_name)
+
+Which expanded to:
+
+   1 |     
+   2 |       def update_all(*args, **kwargs)
+ > 3 |         current_scope.update_all(*args, **kwargs)
+                             ^---------
+Error: wrong number of arguments for 'Grant::Query::Builder(TenantInvoice)#update_all' (given 2, expected 0..1)
+
+Overloads are:
+ - Grant::Query::Builder(Model)#update_all(assignments : String)
+ - Grant::Query::Builder(Model)#update_all(assignments : Hash(String, Grant::Columns::Type))
+ - Grant::Query::Builder(Model)#update_all(assignments : Hash(Symbol, Grant::Columns::Type))
+ - Grant::Query::Builder(Model)#update_all(assignments : Hash(String | Symbol, Grant::Columns::Type))
+ - Grant::Query::Builder(Model)#update_all(assignments : Array(Tuple(String, Grant::Columns::Type)))
+ - Grant::Query::Builder(Model)#update_all(**assignments)
+crystal-run-eval_amber_grant_filter.tmp(35187) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+7/42 grant_row_fiber: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:18:9
+
+ 18 | fiber = Grant::Fiber.new(tenant_id: 12_i64) do
+              ^-----------
+Error: undefined constant Grant::Fiber
+crystal-run-eval_amber_grant_filter.tmp(35652) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+8/42 grant_schema_global: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:19:3
+
+ 19 | public
+      ^-----
+Error: undefined local variable or method 'public' for PublicPlan.class
+crystal-run-eval_amber_grant_filter.tmp(36352) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+9/42 grant_schema_create: compile=true symbols=2/4
+crystal-run-eval_amber_grant_filter.tmp(36884) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+10/42 grant_schema_list_drop: compile=true symbols=1/3
+crystal-run-eval_amber_grant_filter.tmp(38045) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+11/42 grant_schema_invalid: compile=false symbols=1/2
+In harness.cr:63:36
+
+ 63 | Grant::SchemaTenant.with("_acme", &{}) do
+                                         ^
+Error: for empty hashes use '{} of KeyType => ValueType'
+crystal-run-eval_amber_grant_filter.tmp(38396) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+12/42 grant_public_sql: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'method_missing'
+
+Code in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+       ^
+Called macro defined in lib/grant/src/grant/query/where_chain.cr:150:5
+
+ 150 | macro method_missing(call)
+
+Which expanded to:
+
+ > 1 | @query.eql(_arg0, _arg1)
+              ^--
+Error: undefined method 'eql' for Grant::Query::Builder(Plan)
+crystal-run-eval_amber_grant_filter.tmp(38938) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+13/42 amber_handler_row_tenant: compile=false symbols=0/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:18:15
+
+ 18 | RowTenant.find_by_id(account_id)
+                ^---------
+Error: undefined method 'find_by_id' for RowTenant.class
+crystal-run-eval_amber_grant_filter.tmp(39453) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+14/42 amber_web_pipeline: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:14:29
+
+ 14 | plug Amber::Pipe::Session.new("session", session_store: :memory)
+                                ^--
+Error: no parameter named 'session_store'
+
+Overloads are:
+ - Reference.new()
+crystal-run-eval_amber_grant_filter.tmp(39990) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+15/42 apartment_map_switch: compile=true symbols=0/2
+crystal-run-eval_amber_grant_filter.tmp(40971) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+16/42 grant_raw_find_count: compile=true symbols=1/3
+crystal-run-eval_amber_grant_filter.tmp(41799) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+17/42 grant_raw_result: compile=false symbols=1/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:17:18
+
+ 17 | result = RawPost.exec_query("SELECT id, post_title FROM posts WHERE post_status = ?", ["draft"])
+                       ^---------
+Error: undefined method 'exec_query' for RawPost.class
+crystal-run-eval_amber_grant_filter.tmp(42857) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+18/42 grant_raw_bound: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'override_query_method'
+
+Code in lib/grant/src/grant/scoping.cr:425:5
+
+ 425 | override_query_method update_all
+       ^
+Called macro defined in lib/grant/src/grant/scoping.cr:344:5
+
+ 344 | macro override_query_method(method_name)
+
+Which expanded to:
+
+   1 |     
+   2 |       def update_all(*args, **kwargs)
+ > 3 |         current_scope.update_all(*args, **kwargs)
+                             ^---------
+Error: wrong number of arguments for 'Grant::Query::Builder(Post)#update_all' (given 2, expected 0..1)
+
+Overloads are:
+ - Grant::Query::Builder(Model)#update_all(assignments : String)
+ - Grant::Query::Builder(Model)#update_all(assignments : Hash(String, Grant::Columns::Type))
+ - Grant::Query::Builder(Model)#update_all(assignments : Hash(Symbol, Grant::Columns::Type))
+ - Grant::Query::Builder(Model)#update_all(assignments : Hash(String | Symbol, Grant::Columns::Type))
+ - Grant::Query::Builder(Model)#update_all(assignments : Array(Tuple(String, Grant::Columns::Type)))
+ - Grant::Query::Builder(Model)#update_all(**assignments)
+crystal-run-eval_amber_grant_filter.tmp(43796) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+19/42 grant_raw_scoped: compile=false symbols=1/4
+In harness.cr:19:19
+
+ 19 | tenant_id = 12_i64(String)
+                        ^
+Error: unexpected token: "("
+crystal-run-eval_amber_grant_filter.tmp(44720) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+20/42 grant_parity_where_missing: compile=true symbols=1/4
+crystal-run-eval_amber_grant_filter.tmp(45428) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+21/42 grant_schema_shared_audit: compile=true symbols=0/3
+crystal-run-eval_amber_grant_filter.tmp(46148) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+22/42 grant_schema_switch_restore: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:14:3
+
+ 14 | multitenant_schema :schema_tenant_id
+      ^-----------------
+Error: undefined method 'multitenant_schema' for SchemaTenantInvoice.class
+crystal-run-eval_amber_grant_filter.tmp(47108) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+23/42 amber_tenant_pipe_unknown: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:5:22
+
+ 5 | class TenantInvoice< Amber::Handler::Base
+                          ^-------------------
+Error: undefined constant Amber::Handler::Base
+crystal-run-eval_amber_grant_filter.tmp(47830) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+24/42 amber_tenant_pipe_context: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'macro_5137077808'
+
+Code in /opt/homebrew/Cellar/agent-crystal/HEAD-9c1e8ec/share/agent-crystal/src/yaml/from_yaml.cr:296:3
+
+ 296 | {% begin %}
+       ^
+Called macro defined in /opt/homebrew/Cellar/agent-crystal/HEAD-9c1e8ec/share/agent-crystal/src/yaml/from_yaml.cr:296:3
+
+ 296 | {% begin %}
+
+Which expanded to:
+
+    9 |       
+   10 |         begin
+ > 11 |           return HTTP::Handler.new(ctx, node)
+                                       ^--
+Error: undefined method 'new' for HTTP::Handler:Module
+crystal-run-eval_amber_grant_filter.tmp(48539) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+25/42 amber_tenant_pipe_schema: compile=false symbols=0/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'finished'
+
+Code in macro 'inherited'
+
+ 178 | macro finished
+       ^
+Called macro defined in macro 'inherited'
+
+ 178 | macro finished
+
+Which expanded to:
+
+    8 | # user.save        # INSERTs the row
+    9 | # ```
+ > 10 | def initialize(**args)
+            ^---------
+Error: this 'initialize' doesn't explicitly initialize instance variable '@body' of RawPost, rendering it nilable
+
+The instance variable '@body' is initialized in other 'initialize' methods,
+and by not initializing it here it's not clear if the variable is supposed
+to be nilable or if this is a mistake.
+
+To fix this error, either assign nil to it here:
+
+  @body = nil
+
+Or declare it as nilable outside at the type level:
+
+  @body : (Hash(String, JSON::Any))?
+crystal-run-eval_amber_grant_filter.tmp(49306) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+26/42 amber_tenant_pipe_routes: compile=false symbols=1/2
+In harness.cr:37:15
+
+ 37 | private def @storage
+                  ^
+Error: expecting any of these tokens: IDENT, CONST, `, <<, <, <=, ==, ===, !=, =~, !~, >>, >, >=, +, -, *, /, //, !, ~, %, &, |, ^, **, [], []=, []?, <=>, &+, &-, &*, &** (not '@storage')
+crystal-run-eval_amber_grant_filter.tmp(49879) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+27/42 apartment_schema_switch: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:24:11
+
+ 24 | include Grant::SchemaTenant
+              ^------------------
+Error: Grant::SchemaTenant is not a module, it's a class
+crystal-run-eval_amber_grant_filter.tmp(50698) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+28/42 apartment_current_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:6:3
+
+ 6 | table_tenant_schemas
+     ^-------------------
+Error: undefined local variable or method 'table_tenant_schemas' for SchemaTenant.class
+crystal-run-eval_amber_grant_filter.tmp(51066) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+29/42 apartment_create_schema: compile=false symbols=1/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:31:21
+
+ 31 | Grant::SchemaTenant.create_schema("The Willow", plan_code: "basic")
+                          ^------------
+Error: no parameter named 'plan_code'
+
+Overloads are:
+ - Grant::SchemaTenant.create_schema(schema : String, adapter : Grant::Adapter::Base | ::Nil = nil)
+crystal-run-eval_amber_grant_filter.tmp(51591) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+30/42 apartment_drop_schema: compile=false symbols=0/2
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:28:8
+
+ 28 | module Tenant
+             ^
+Error: Tenant is not a module, it's a class
+crystal-run-eval_amber_grant_filter.tmp(52166) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+31/42 apartment_row_tenant: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:31:24
+
+ 31 | tenant = Grant::Tenant.new("acme")
+                             ^--
+Error: wrong number of arguments for 'Grant::Tenant.new' (given 1, expected 0)
+
+Overloads are:
+ - Reference.new()
+crystal-run-eval_amber_grant_filter.tmp(52658) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+32/42 grant_raw_select_one: compile=true symbols=1/3
+crystal-run-eval_amber_grant_filter.tmp(54251) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+33/42 grant_parity_habtm: compile=false symbols=1/3
+In harness.cr:78:1
+Error: expecting identifier 'end', not 'EOF'
+crystal-run-eval_amber_grant_filter.tmp(54663) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+34/42 grant_parity_create_or_find: compile=false symbols=1/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:14:8
+
+ 14 | report.status = "create_or_find_by"
+             ^-----
+Error: undefined method 'status=' for ParityReport
+crystal-run-eval_amber_grant_filter.tmp(55200) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+35/42 grant_parity_composite_keys: compile=true symbols=0/3
+crystal-run-eval_amber_grant_filter.tmp(55905) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+36/42 grant_parity_raw_sql: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:25:3
+
+ 25 | raw "SELECT id, post_title FROM posts WHERE id = ?", [42_i64]
+      ^--
+Error: undefined method 'raw' for RawPost.class
+crystal-run-eval_amber_grant_filter.tmp(56640) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+37/42 grant_parity_transactions: compile=false symbols=1/3
+In harness.cr:16:8
+
+ 16 | enum state : String = ["pending", "active", "locked", "expired"]
+           ^
+Error: expecting token 'CONST', not 'state'
+crystal-run-eval_amber_grant_filter.tmp(56772) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+38/42 amber_heldout_route: compile=false symbols=3/3
+In harness.cr:12:22
+
+ 12 | from UsersController import index
+                           ^
+Error: unexpected token: "import"
+crystal-run-eval_amber_grant_filter.tmp(56910) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+39/42 amber_heldout_channel: compile=false symbols=0/3
+In harness.cr:17:1
+
+ 17 | end
+      ^
+Error: expecting token 'EOF', not 'end'
+crystal-run-eval_amber_grant_filter.tmp(58245) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+40/42 amber_heldout_schema: compile=false symbols=2/3
+Showing last frame. Use --error-trace for full trace.
+
+There was a problem expanding macro 'string'
+
+Code in harness.cr:8:3
+
+ 8 | string  :email,     required: true, format: "email"
+     ^
+Called macro defined in lib/amber/src/amber/schema/dsl.cr:5:5
+
+ 5 | macro string(name, required = false, **options)
+
+Which expanded to:
+
+ > 1 | field(":email", String, true, format: "email")
+       ^----
+Error: no parameter named 'format'
+crystal-run-eval_amber_grant_filter.tmp(58961) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+41/42 amber_heldout_job: compile=false symbols=3/4
+Showing last frame. Use --error-trace for full trace.
+
+In harness.cr:3:7
+
+ 3 | class Class < Grant::Base; end
+           ^
+Error: superclass mismatch for class Class (Grant::Base for Value)
+crystal-run-eval_amber_grant_filter.tmp(59588) MallocStackLogging: can't turn off malloc stack logging because it was not enabled.
+42/42 amber_heldout_controller: compile=true symbols=1/3
+compile rate: 10/42
+required-symbol complete cases: 2/42
+artifact: /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/eval_results/round3b-0.2.1-live-final-run-1.jsonl
