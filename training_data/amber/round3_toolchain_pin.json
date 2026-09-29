@@ -129,9 +129,9 @@
   },
   "native_mlx_bridge": {
     "path": "/Users/crimsonknight/.llamero/lib/libLlameroMLXBridge.dylib",
-    "sha256": "507f9337d754eabd408c6a26659ff45c4341a42f69b6198d9c9b462c81291fd9",
+    "sha256": "514597db2a9445fb8d9ad5bd01446fdd7acd0e979bca40cb1e3b6d42f7b8701a",
     "source_file": "native/llamero-mlx/Sources/LlameroMLXBridge/Bridge.swift",
-    "source_sha256": "0d1ed6c1df08462c371c5eb1f02f403401da3ca2b86814bcab1f4e1b2f1c8c43"
+    "source_sha256": "2bb4f636d12dff72c2f7f1cd15403c7c7a65c6431a4565050da84f232523e32c"
   },
   "swift_packages": {
     "manifest": "native/llamero-mlx/Package.swift",

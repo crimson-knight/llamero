@@ -36,6 +36,7 @@ module Llamero::Native
       when "generation_completed"                    then GenerationCompletedEvent.new(raw)
       when "logit_probe_completed"                   then LogitProbeEvent.new(raw)
       when "training_tokenization_preview_completed" then TrainingTokenizationPreviewEvent.new(raw)
+      when "loss_evaluation_completed"               then LossEvaluationEvent.new(raw)
       when "training_progress"                       then TrainingProgressEvent.new(raw)
       when "training_validation"                     then TrainingValidationEvent.new(raw)
       when "training_completed"                      then TrainingCompletedEvent.new(raw)
@@ -257,6 +258,30 @@ module Llamero::Native
     end
 
     delegate preview_id, rendered_text, token_count, token_ids, decoded_text,
+      to: payload
+  end
+
+  # Token-weighted SFT loss measured on the resident model as it is now
+  # (base, live adapter, or fused adapter), plus each row's own loss.
+  class LossEvaluationPayload
+    include JSON::Serializable
+
+    property evaluation_id : String = ""
+    property? completion_only_loss : Bool = false
+    property rows : Int32 = 0
+    property loss : Float64 = 0.0
+    property row_losses : Array(Float64) = [] of Float64
+  end
+
+  struct LossEvaluationEvent < NativeEvent
+    getter payload : LossEvaluationPayload
+
+    def initialize(raw : JSON::Any)
+      super(raw)
+      @payload = LossEvaluationPayload.from_json(raw.to_json)
+    end
+
+    delegate evaluation_id, completion_only_loss?, rows, loss, row_losses,
       to: payload
   end
 

@@ -266,6 +266,60 @@ module Llamero::Native
       end
     end
 
+    # Measures the SFT loss of `data_dir/train.jsonl` on the resident model in
+    # its current state (base, live adapter, or fused adapter) with the exact
+    # tokenizer and loss function that `train_adapter` uses. Comparing this
+    # with the training loss probe localizes train/serve gaps.
+    def evaluate_loss(
+      evaluation_id : String,
+      data_dir : Path | String,
+      completion_only_loss : Bool,
+      row_limit : Int32? = nil,
+    ) : LossEvaluationEvent
+      ensure_loaded
+      raise ArgumentError.new("evaluation_id cannot be blank") if evaluation_id.blank?
+      mlx_bridge = @bridge.as?(MLXBridge) ||
+                   raise BridgeUnavailableError.new("Loss evaluation requires the real MLX bridge")
+
+      error : NativeErrorEvent? = nil
+      completed : LossEvaluationEvent? = nil
+      request = LossEvaluationRequest.new(evaluation_id, data_dir.to_s, completion_only_loss, row_limit)
+      mlx_bridge.evaluate_loss(@handle, request.to_json) do |frame|
+        event = dispatch(frame)
+        case event
+        when LossEvaluationEvent then completed = event
+        when NativeErrorEvent    then error = event
+        end
+      end
+
+      if failure = error
+        raise failure.to_error
+      end
+      if result = completed
+        result
+      else
+        raise NativeError.new(
+          "Bridge finished a loss evaluation without a result",
+          "loss_evaluation_failed",
+          recoverable: true,
+          base_model_loaded: loaded?
+        )
+      end
+    end
+
+    # Outgoing request for `evaluate_loss`.
+    struct LossEvaluationRequest
+      include JSON::Serializable
+
+      getter evaluation_id : String
+      getter data_dir : String
+      getter? completion_only_loss : Bool
+      getter row_limit : Int32?
+
+      def initialize(@evaluation_id : String, @data_dir : String, @completion_only_loss : Bool, @row_limit : Int32? = nil)
+      end
+    end
+
     # Register a distributable training filter's adapter under its name so it can
     # be activated, returning the slot. The filter should already be loaded
     # (and thus checksum-verified) via `TrainingFilter.load`/`.installed`.

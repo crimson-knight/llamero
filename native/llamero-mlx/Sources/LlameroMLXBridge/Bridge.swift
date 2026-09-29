@@ -221,6 +221,20 @@ struct LogitProbeRequest: Codable {
     }
 }
 
+struct LossEvaluationRequest: Codable {
+    var evaluationId: String
+    var dataDir: String
+    var completionOnlyLoss: Bool
+    var rowLimit: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case evaluationId = "evaluation_id"
+        case dataDir = "data_dir"
+        case completionOnlyLoss = "completion_only_loss"
+        case rowLimit = "row_limit"
+    }
+}
+
 struct TrainingTokenizationPreviewRequest: Codable {
     var previewId: String
     var renderedText: String
@@ -1599,6 +1613,114 @@ public func llamero_mlx_session_preview_training_tokens(
             sink.fail(
                 message: "Training tokenization preview failed: \(error)",
                 code: "tokenization_preview_failed",
+                recoverable: true,
+                baseModelLoaded: session.loaded
+            )
+        }
+    }
+
+    return sink.drain(callback: callback, userData: userData)
+}
+
+// Measures the token-weighted training loss of an SFT dataset (`train.jsonl`)
+// on the RESIDENT model exactly as it is now: base, live LoRA, or fused. It
+// uses the training tokenizer wrapper and the same loss function as
+// train_adapter, so a value here is directly comparable with the training
+// loss probe. Per-row losses are reported too, to localize train/serve gaps.
+@_cdecl("llamero_mlx_session_evaluate_loss")
+public func llamero_mlx_session_evaluate_loss(
+    _ handle: Int64,
+    _ requestJson: UnsafePointer<CChar>?,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let session = BridgeRegistry.shared.session(handle) else { return 2 }
+    guard let requestJson,
+        let data = String(cString: requestJson).data(using: .utf8),
+        let request = try? JSONDecoder().decode(LossEvaluationRequest.self, from: data)
+    else { return 3 }
+
+    let sink = EventSink(
+        sessionId: "mlx-session-\(handle)",
+        modelId: session.modelId,
+        adapterStackId: session.adapterStackId
+    )
+
+    Task.detached {
+        guard let container = session.container, session.loaded else {
+            sink.fail(
+                message: "Cannot evaluate loss before the model is loaded",
+                code: "loss_evaluation_failed",
+                recoverable: true,
+                baseModelLoaded: false
+            )
+            return
+        }
+
+        do {
+            var rows = try loadLoRAData(directory: URL(fileURLWithPath: request.dataDir), name: "train")
+            if let rowLimit = request.rowLimit, rowLimit > 0 {
+                rows = Array(rows.prefix(rowLimit))
+            }
+            guard !rows.isEmpty else {
+                throw BridgeError(
+                    message: "Loss evaluation dataset at \(request.dataDir) is empty",
+                    code: "loss_evaluation_failed")
+            }
+            let evaluationRows = rows
+
+            let result: (loss: Double, rowLosses: [Double]) = try await container.perform { context in
+                let trainingTokenizer = SpecialTokenAwareTrainingTokenizer(context.tokenizer)
+                let completionMarkerTokens = request.completionOnlyLoss
+                    ? trainingTokenizer.encode(text: "<start_of_turn>model\n", addSpecialTokens: false)
+                    : nil
+                if request.completionOnlyLoss {
+                    guard context.model is Gemma3, let completionMarkerTokens, !completionMarkerTokens.isEmpty else {
+                        throw BridgeError(
+                            message: "Completion-only loss currently requires a Gemma 3 model with its assistant-turn marker",
+                            code: "completion_marker_missing")
+                    }
+                }
+                let evaluationLoss: LoRATrain.LoraLossFunction = { model, inputs, targets, lengths in
+                    llameroLoraTrainingLoss(
+                        model: model,
+                        inputs: inputs,
+                        targets: targets,
+                        lengths: lengths,
+                        completionMarkerTokens: completionMarkerTokens)
+                }
+                let rowLosses = evaluationRows.map { row in
+                    Double(LoRATrain.evaluate(
+                        model: context.model,
+                        dataset: [row],
+                        loss: evaluationLoss,
+                        tokenizer: trainingTokenizer,
+                        batchSize: 1,
+                        batchCount: 0))
+                }
+                let loss = Double(LoRATrain.evaluate(
+                    model: context.model,
+                    dataset: evaluationRows,
+                    loss: evaluationLoss,
+                    tokenizer: trainingTokenizer,
+                    batchSize: 1,
+                    batchCount: 0))
+                return (loss, rowLosses)
+            }
+
+            sink.emit([
+                "event": "loss_evaluation_completed",
+                "evaluation_id": request.evaluationId,
+                "completion_only_loss": request.completionOnlyLoss,
+                "rows": evaluationRows.count,
+                "loss": result.loss,
+                "row_losses": result.rowLosses,
+            ])
+            sink.finish()
+        } catch {
+            sink.fail(
+                message: "Loss evaluation failed: \(error)",
+                code: "loss_evaluation_failed",
                 recoverable: true,
                 baseModelLoaded: session.loaded
             )

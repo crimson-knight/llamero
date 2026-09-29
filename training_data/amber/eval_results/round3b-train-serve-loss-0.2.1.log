@@ -1,0 +1,8 @@
+base: loss=2.9885 rows=84 first5=[3.664, 3.155, 3.165, 3.44, 2.731]
+prior-stages-fused: loss=1.896 rows=84 first5=[1.686, 1.621, 1.585, 2.217, 1.507]
+final-stage-live: loss=0.2091 rows=84 first5=[0.11, 0.091, 0.142, 0.454, 0.141]
+final-stage-fused: loss=1.3471 rows=84 first5=[1.03, 1.027, 0.948, 1.549, 1.059]
+activate-filter: loss=1.3471 rows=84 first5=[1.03, 1.027, 0.948, 1.549, 1.059]
+final-stage-only-live: loss=0.2336 rows=84 first5=[0.127, 0.12, 0.22, 0.495, 0.164]
+final-stage-only-fused: loss=1.668 rows=84 first5=[1.758, 1.627, 1.545, 1.931, 1.532]
+artifact: /Users/crimsonknight/.claude/jobs/b433c3e9/tmp/llamero-opus/trainserve-0.2.1.jsonl
