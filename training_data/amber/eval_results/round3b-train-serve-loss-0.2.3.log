@@ -1,0 +1,8 @@
+base: loss=2.9885 rows=84 first5=[3.664, 3.155, 3.165, 3.44, 2.731]
+prior-stages-fused: loss=2.2688 rows=84 first5=[2.284, 2.092, 2.011, 2.974, 2.176]
+final-stage-live: loss=0.1148 rows=84 first5=[0.037, 0.032, 0.023, 0.049, 0.102]
+final-stage-fused: loss=2.1141 rows=84 first5=[2.082, 1.889, 1.846, 2.676, 2.015]
+activate-filter: loss=0.1148 rows=84 first5=[0.037, 0.032, 0.023, 0.049, 0.102]
+final-stage-only-live: loss=1.8828 rows=84 first5=[2.166, 1.796, 1.861, 2.358, 1.64]
+final-stage-only-fused: loss=2.8039 rows=84 first5=[3.37, 2.852, 2.935, 3.308, 2.579]
+artifact: /Users/crimsonknight/open_source_coding_projects/llamero-grant-corpus/training_data/amber/eval_results/round3b-train-serve-loss-0.2.3.jsonl

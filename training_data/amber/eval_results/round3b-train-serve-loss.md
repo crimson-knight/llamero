@@ -57,3 +57,27 @@ further training.
 
 Raw per-row losses: `round3b-train-serve-loss-0.2.1.jsonl`; run log:
 `round3b-train-serve-loss-0.2.1.log`.
+
+## After the fix: 0.2.3
+
+`amber-v2@0.2.3` is a four-stage chain (Amber 0.1.0 stages 0 and 1, a
+syntax stage, and a completion-only usage stage). Its training run reported
+usage-stage Grant loss 2.2688 before and 0.1148 after.
+
+| Step | Loss (84 rows) |
+| --- | ---: |
+| Pinned base | 2.9885 |
+| Stages 0-2 fused (the base the usage stage trained on) | 2.2688 |
+| Stages 0-2 fused + usage stage live (training state) | 0.1148 |
+| Stages 0-2 fused + usage stage fused | 2.1141 |
+| `activate_filter` after the fix | **0.1148** |
+| Usage stage alone on the base, live | 1.8828 |
+| Usage stage alone on the base, fused | 2.8039 |
+
+The public activation path now reproduces the training loss exactly. Fusing
+the usage stage would still erase almost all of it (2.1141). The usage stage
+depends on the fused seed stages it trained on (1.8828 without them), so the
+chain must be applied in order.
+
+Raw rows: `round3b-train-serve-loss-0.2.3.jsonl`; log:
+`round3b-train-serve-loss-0.2.3.log`.
