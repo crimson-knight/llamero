@@ -1,0 +1,41 @@
+{
+  "filter_id": "amber-v2@0.2.3",
+  "files": [
+    {
+      "path": "stage-0/adapter_config.json",
+      "sha256": "8d7b124c1ddf1dbfb7eb8e3836b7398cc9ccadf524913bf44fd5767647d29675"
+    },
+    {
+      "path": "stage-0/adapters.safetensors",
+      "sha256": "bd4b2b0a3ab5c08bb1a0bf5041642bde3b40bc4dea57622724137aa2d90199a0"
+    },
+    {
+      "path": "stage-1/adapter_config.json",
+      "sha256": "bff9b26c6f731e28832bb490d427f8f4da86f8a56ada4e17b5062bd59932016c"
+    },
+    {
+      "path": "stage-1/adapters.safetensors",
+      "sha256": "41a4288282027d8335a0cc6d91d0d442a8513c88c2d1d2a37da369ea30c298be"
+    },
+    {
+      "path": "stage-2/adapter_config.json",
+      "sha256": "6cd315d7420490358287538bd5e66c4b3201fafd68b2122ca498862d866aab9e"
+    },
+    {
+      "path": "stage-2/adapters.safetensors",
+      "sha256": "1c3734ef681f2a83f9bd883a98132472821799f6d69243f55dea8afff4c72422"
+    },
+    {
+      "path": "stage-3/adapter_config.json",
+      "sha256": "ea8aac0ac071f43a0ea99482a3dc326c2efc50b33ef5863c422b2b8e83ff4c3c"
+    },
+    {
+      "path": "stage-3/adapters.safetensors",
+      "sha256": "72275464bf868ed6cbbe6839f97ec80adc581b31df8ce70b8d6cfcf13c282c1c"
+    },
+    {
+      "path": "training_filter.json",
+      "sha256": "b9206f70c037d31c1775dbaf4ac4ecb6aae8ad9d6eb37032eea9ffdf38907384"
+    }
+  ]
+}

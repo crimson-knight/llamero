@@ -1,0 +1,39 @@
+{
+  "name": "amber-v2",
+  "version": "0.2.3",
+  "base_model": "mlx-community/gemma-3-4b-it-4bit@93724907d4ed1745d2fe50baadf3b0b01a65abf2",
+  "library": "amber",
+  "library_version": "2.0.0-dev",
+  "lora": {
+    "rank": 8,
+    "scale": 1.0,
+    "num_layers": 16
+  },
+  "provenance": {
+    "methods": [
+      "fused-base-amber-v2@0.1.0",
+      "syntax",
+      "usage"
+    ],
+    "generator": "examples/train_amber_v2_adapter",
+    "created_at": "2026-09-29T04:35:33Z"
+  },
+  "weights_checksum": "52b86c30e487b19d",
+  "metrics": {
+    "pairs": 296.0,
+    "rank": 8.0,
+    "scale": 1.0,
+    "num_layers": 16.0,
+    "learning_rate": 0.0001,
+    "batch_size": 1.0,
+    "completion_only_loss": 1.0,
+    "unsupervised_iterations": 200.0,
+    "supervised_iterations": 400.0
+  },
+  "stages": [
+    "stage-0",
+    "stage-1",
+    "stage-2",
+    "stage-3"
+  ]
+}
