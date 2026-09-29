@@ -163,7 +163,9 @@ end
 unless filter.manifest.lora.rank == 8 && filter.manifest.lora.num_layers == 16
   abort "filter LoRA shape mismatch: expected rank 8 across 16 layers"
 end
-expected_stage_count = filter.manifest.version == "0.2.2" ? 4 : 2
+# A filter seeded from Amber 0.1.0 carries that filter's two stages first.
+is_seeded_from_amber_filter = filter.manifest.provenance.methods.any?(&.starts_with?("fused-base-amber-v2@"))
+expected_stage_count = is_seeded_from_amber_filter ? 4 : 2
 unless filter.manifest.stages.size == expected_stage_count
   abort "expected #{expected_stage_count} Amber V2 filter stages; got #{filter.manifest.stages.size}"
 end
