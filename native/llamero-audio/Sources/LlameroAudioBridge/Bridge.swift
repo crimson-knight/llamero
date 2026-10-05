@@ -17,6 +17,7 @@
 // runtime is cheap and apps only pay for the models they touch.
 
 import AVFoundation
+import CoreML
 import FluidAudio
 import Foundation
 
@@ -1004,6 +1005,27 @@ private func makeStreamPcmBuffer(_ samples: ArraySlice<Float>) -> AVAudioPCMBuff
     return buffer
 }
 
+/// The Parakeet EOU streaming models run on the Neural Engine. Under
+/// `MLModelConfiguration()`'s default `.all`, CoreML places them on the GPU,
+/// whose MPS weight copies live in the process's malloc heap (about 235 MB)
+/// and stay dirty after the manager is released.
+///
+/// Measured in Scribe (2026-10-05, macOS 26, Apple silicon): with `.all`
+/// the process footprint grew by about +245 MB once the live-preview model
+/// loaded and stayed counted after the manager was released. With
+/// `.cpuAndNeuralEngine` the same load cost +10 to +17 MB and the transcript
+/// text was identical. Evidence: scribe-release-candidates/2026-10-03/
+/// evidence/memory-release/ (footprint captures and this patch).
+///
+/// The bridge has no Swift test target, so this note carries the reason;
+/// keep the compute units at `.cpuAndNeuralEngine` unless a new footprint
+/// measurement shows the GPU path releases its weights.
+func streamingEouModelConfiguration() -> MLModelConfiguration {
+    let configuration = MLModelConfiguration()
+    configuration.computeUnits = .cpuAndNeuralEngine
+    return configuration
+}
+
 /// Loads (or checks out from the parent runtime's cache) the Parakeet EOU
 /// streaming manager on a stream's first push, emitting asr_model_load_*
 /// events when a real load happens. Callbacks are (re)bound to this stream's
@@ -1031,6 +1053,7 @@ private func ensureStreamManager(_ box: AudioStreamBox, sink: EventSink) async t
         let start = Date()
         let throttle = ProgressThrottle()
         let fresh = StreamingEouAsrManager(
+            configuration: streamingEouModelConfiguration(),
             chunkSize: box.chunkSize, eouDebounceMs: box.eouDebounceMs)
         try await fresh.loadModels(
             to: runtime.streamingModelsDirectory(), configuration: nil,
