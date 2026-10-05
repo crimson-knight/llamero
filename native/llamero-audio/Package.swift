@@ -27,6 +27,18 @@ let package = Package(
                 // (same choice as native/llamero-mlx).
                 .swiftLanguageMode(.v5)
             ]
-        )
+        ),
+        // `swift test --package-path native/llamero-audio`; `swift build`
+        // (build.sh) builds only the bridge.
+        .testTarget(
+            name: "LlameroAudioBridgeTests",
+            dependencies: [
+                "LlameroAudioBridge",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v5)
+            ]
+        ),
     ]
 )

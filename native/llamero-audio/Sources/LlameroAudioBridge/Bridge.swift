@@ -671,6 +671,20 @@ public func llamero_audio_runtime_free(_ handle: Int64) {
     AudioBridgeRegistry.shared.removeRuntime(handle)
 }
 
+// Transcribes a file through the process-wide resampler cache
+// (AsrFileResampler) when it covers the file: mono audio short enough for
+// FluidAudio's in-memory path. Other files keep AsrManager's URL overload,
+// which reads the file via AVAudioFile and resamples to the 16 kHz mono
+// Float32 the models expect (disk-backed past its streaming threshold).
+private func transcribeFile(
+    _ url: URL, with manager: AsrManager, decoderState: inout TdtDecoderState
+) async throws -> ASRResult {
+    if let samples = try AsrFileResampler.shared.asrSamples(of: url) {
+        return try await manager.transcribe(samples, decoderState: &decoderState)
+    }
+    return try await manager.transcribe(url, decoderState: &decoderState)
+}
+
 @_cdecl("llamero_audio_transcribe_file")
 public func llamero_audio_transcribe_file(
     _ handle: Int64,
@@ -694,12 +708,10 @@ public func llamero_audio_transcribe_file(
 
             let manager = try await ensureAsrManager(runtime, sink: sink)
 
-            // Fresh decoder state per one-shot transcription. AsrManager's
-            // URL overload reads the file via AVAudioFile and resamples to
-            // the 16kHz mono Float32 the models expect.
+            // Fresh decoder state per one-shot transcription.
             var decoderState = TdtDecoderState.make(decoderLayers: runtime.asrDecoderLayers)
-            let result = try await manager.transcribe(
-                URL(fileURLWithPath: request.path), decoderState: &decoderState)
+            let result = try await transcribeFile(
+                URL(fileURLWithPath: request.path), with: manager, decoderState: &decoderState)
 
             var segments = wordSegments(from: result.tokenTimings ?? [])
             let fileDurationMs = audioDurationMs(for: URL(fileURLWithPath: request.path))
@@ -772,8 +784,8 @@ public func llamero_audio_runtime_transcribe_diarized(
 
             let asrManager = try await ensureAsrManager(runtime, sink: sink)
             var decoderState = TdtDecoderState.make(decoderLayers: runtime.asrDecoderLayers)
-            let asrResult = try await asrManager.transcribe(
-                URL(fileURLWithPath: path), decoderState: &decoderState)
+            let asrResult = try await transcribeFile(
+                URL(fileURLWithPath: path), with: asrManager, decoderState: &decoderState)
 
             let wordsFromTimings = wordSpans(from: asrResult.tokenTimings ?? [])
             let words: [WordSpan]
