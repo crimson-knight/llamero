@@ -1,0 +1,12 @@
+version: 2.0
+shards:
+  crinja:
+    git: https://github.com/straight-shoota/crinja.git
+    version: 0.9.0
+    checksum: sha256:a12941e4f285b0b91481bae1a3f1d4ef8cdfbdb380812b6c518122e15e76c64d
+
+  webmock:
+    git: https://github.com/manastech/webmock.cr.git
+    version: 0.14.0+git.commit.42b347cdd64e13193e46167a03593944ae2b3d20
+    checksum: sha256:a9cd1880e2be407a803d7795b1798d34a8867abf2893d0a9f7a2d2ce091e8eb6
+

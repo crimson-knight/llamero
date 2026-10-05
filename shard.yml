@@ -25,3 +25,5 @@ dependencies:
 development_dependencies:
   webmock:
     github: manastech/webmock.cr
+    # v0.14.0
+    commit: 42b347cdd64e13193e46167a03593944ae2b3d20

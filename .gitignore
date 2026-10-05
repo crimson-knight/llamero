@@ -7,9 +7,8 @@
 main.log
 .DS_Store
 
-# Libraries don't need dependency lock
-# Dependencies will be locked in applications that use them
-/shard.lock
+# shard.lock is committed: the dependency-pinning rule records the exact
+# commit and checksum of every dependency, libraries included.
 
 # Swift build products for the native MLX bridge
 /native/llamero-mlx/.build/

@@ -1,12 +1,11 @@
 {
-  "originHash" : "8612ca6a2ae242e5e70882861552d503a0d39c95add0bc41c7a5cfdf1c802874",
+  "originHash" : "fcfa637615cd13513f18b316cbf07c1e7e5d58970ec77c6abcf54e12fe1b3f32",
   "pins" : [
     {
       "identity" : "fluidaudio",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/crimson-knight/FluidAudio",
       "state" : {
-        "branch" : "configurable-storage-paths",
         "revision" : "f43bf6c610443d9e91dd23399a912055926fce3c"
       }
     }
