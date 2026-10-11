@@ -1,0 +1,12 @@
+version: 2.0
+shards:
+  crinja:
+    git: https://github.com/straight-shoota/crinja.git
+    version: 0.9.0
+    checksum: git-tree:f29d092e135e430d42f4fc69dd415dad11803fbb
+
+  webmock:
+    git: https://github.com/manastech/webmock.cr.git
+    version: 0.14.0
+    checksum: git-tree:f35a0c6ac5700bd920c5cdf1548024438bb3aa6b
+

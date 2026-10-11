@@ -13,7 +13,8 @@ let package = Package(
     dependencies: [
         // CoreML/ANE-based Parakeet ASR + Kokoro TTS. Runs speech models on
         // the Neural Engine, leaving the GPU to the MLX LLM bridge.
-        .package(url: "https://github.com/crimson-knight/FluidAudio", branch: "configurable-storage-paths")
+        // Pinned to the configurable-storage-paths revision it resolved to.
+        .package(url: "https://github.com/crimson-knight/FluidAudio", revision: "f43bf6c610443d9e91dd23399a912055926fce3c")
     ],
     targets: [
         .target(
