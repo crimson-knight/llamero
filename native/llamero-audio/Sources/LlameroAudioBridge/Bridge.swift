@@ -101,8 +101,16 @@ final class AudioRuntimeBox: @unchecked Sendable {
     // bridge's SessionBox.
     var asrManager: AsrManager?
     var asrDecoderLayers: Int = 2
-    var offlineDiarizerModels: OfflineDiarizerModels?
     var tts: KokoroAneManager?
+
+    // The offline diarizer's models can be preloaded
+    // (llamero_audio_runtime_preload_diarizer) while another call runs on
+    // this runtime, so they are the one piece of runtime state guarded by a
+    // lock. A load in flight is shared: a second caller awaits it instead of
+    // loading the models again.
+    private let diarizerLock = NSLock()
+    private var offlineDiarizerModels: OfflineDiarizerModels?
+    private var offlineDiarizerLoad: Task<OfflineDiarizerModels, Error>?
 
     // Streaming EOU managers are expensive to load, so freed streams park
     // their manager here (already reset) and the next stream with the same
@@ -113,6 +121,44 @@ final class AudioRuntimeBox: @unchecked Sendable {
     init(config: AudioRuntimeConfig) {
         self.config = config
         FluidAudio.modelsDirectoryOverride = modelsDirectory
+    }
+
+    /// The resident diarizer models, or the load in flight to await, or
+    /// nil when neither exists (the caller then starts the load).
+    func residentOrLoadingDiarizerModels() -> (OfflineDiarizerModels?, Task<OfflineDiarizerModels, Error>?) {
+        diarizerLock.lock()
+        defer { diarizerLock.unlock() }
+        return (offlineDiarizerModels, offlineDiarizerLoad)
+    }
+
+    /// Starts *load* as this runtime's diarizer load unless another caller
+    /// started one first, and returns the load to await.
+    func shareDiarizerLoad(_ load: @escaping () async throws -> OfflineDiarizerModels)
+        -> (task: Task<OfflineDiarizerModels, Error>, isStartedHere: Bool)
+    {
+        diarizerLock.lock()
+        defer { diarizerLock.unlock() }
+        if let running = offlineDiarizerLoad {
+            return (running, false)
+        }
+        if let models = offlineDiarizerModels {
+            return (Task { models }, false)
+        }
+        let task = Task { try await load() }
+        offlineDiarizerLoad = task
+        return (task, true)
+    }
+
+    /// Records the end of the load started by shareDiarizerLoad: the models
+    /// stay resident on success; a failure clears the load so a later call
+    /// can try again.
+    func finishDiarizerLoad(_ models: OfflineDiarizerModels?) {
+        diarizerLock.lock()
+        defer { diarizerLock.unlock() }
+        if let models {
+            offlineDiarizerModels = models
+        }
+        offlineDiarizerLoad = nil
     }
 
     var asrVersion: AsrModelVersion {
@@ -414,41 +460,57 @@ private func ensureAsrManager(_ runtime: AudioRuntimeBox, sink: EventSink) async
 /// Loads the offline diarization CoreML bundles on first use. The models are
 /// parked on the runtime and reused by future diarized transcriptions; each
 /// call creates a fresh OfflineDiarizerManager around the resident models so
-/// per-call clustering/speaker-count config can vary without reloading.
+/// per-call clustering/speaker-count config can vary without reloading. A
+/// call that finds a load already running (a preload) awaits that load; only
+/// the caller that starts a load reports its events.
 private func ensureOfflineDiarizerModels(_ runtime: AudioRuntimeBox, sink: EventSink) async throws
     -> OfflineDiarizerModels
 {
-    if let models = runtime.offlineDiarizerModels {
+    let (resident, loading) = runtime.residentOrLoadingDiarizerModels()
+    if let models = resident {
         return models
+    }
+    if let loading {
+        return try await loading.value
+    }
+
+    let throttle = ProgressThrottle()
+    let start = Date()
+    let shared = runtime.shareDiarizerLoad {
+        try await OfflineDiarizerModels.load(
+            from: runtime.modelsDirectory,
+            progressHandler: { progress in
+                let fraction = progress.fractionCompleted
+                if throttle.shouldReport(fraction) {
+                    sink.emit([
+                        "event": "diarizer_model_load_progress",
+                        "progress": fraction,
+                    ])
+                }
+            }
+        )
+    }
+    guard shared.isStartedHere else {
+        return try await shared.task.value
     }
 
     sink.emit([
         "event": "diarizer_model_load_started",
         "model_version": "offline-vbx",
     ])
-    let start = Date()
-
-    let throttle = ProgressThrottle()
-    let models = try await OfflineDiarizerModels.load(
-        from: runtime.modelsDirectory,
-        progressHandler: { progress in
-            let fraction = progress.fractionCompleted
-            if throttle.shouldReport(fraction) {
-                sink.emit([
-                    "event": "diarizer_model_load_progress",
-                    "progress": fraction,
-                ])
-            }
-        }
-    )
-
-    runtime.offlineDiarizerModels = models
-    sink.emit([
-        "event": "diarizer_model_loaded",
-        "model_version": "offline-vbx",
-        "load_time_ms": Date().timeIntervalSince(start) * 1000,
-    ])
-    return models
+    do {
+        let models = try await shared.task.value
+        runtime.finishDiarizerLoad(models)
+        sink.emit([
+            "event": "diarizer_model_loaded",
+            "model_version": "offline-vbx",
+            "load_time_ms": Date().timeIntervalSince(start) * 1000,
+        ])
+        return models
+    } catch {
+        runtime.finishDiarizerLoad(nil)
+        throw error
+    }
 }
 
 /// Loads the Kokoro TTS chain on first use, emitting progress events.
@@ -854,6 +916,38 @@ public func llamero_audio_runtime_transcribe_diarized(
         } catch {
             sink.fail(
                 message: "Diarized transcription failed: \(error)",
+                code: "diarization_failed",
+                recoverable: true
+            )
+        }
+    }
+
+    return sink.drain(callback: callback, userData: userData)
+}
+
+/// Loads the offline diarizer's models on a runtime without transcribing, so a
+/// later llamero_audio_runtime_transcribe_diarized starts without loading
+/// them. Streams diarizer_model_load_started/progress/loaded when the models
+/// load, nothing when they are already resident, or an error frame. Safe to
+/// call while another call runs on the same runtime: a diarized
+/// transcription that starts during the load awaits it.
+@_cdecl("llamero_audio_runtime_preload_diarizer")
+public func llamero_audio_runtime_preload_diarizer(
+    _ handle: Int64,
+    _ callback: LlameroEventCallback?,
+    _ userData: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let runtime = AudioBridgeRegistry.shared.runtime(handle) else { return 2 }
+
+    let sink = EventSink(sessionId: "audio-runtime-\(handle)")
+
+    Task.detached {
+        do {
+            _ = try await ensureOfflineDiarizerModels(runtime, sink: sink)
+            sink.finish()
+        } catch {
+            sink.fail(
+                message: "Diarizer preload failed: \(error)",
                 code: "diarization_failed",
                 recoverable: true
             )

@@ -258,6 +258,34 @@ module Llamero::Native
       )
     end
 
+    # Loads the offline diarizer's models now (compiling them for the Neural
+    # Engine on their first use on this machine), so a later
+    # `transcribe_diarized` starts without loading them. Emits the
+    # DiarizerModelLoad* events when the models load; returns at once when
+    # they are already resident. A `transcribe_diarized` call made while this
+    # runs, from another thread, waits for this load instead of starting a
+    # second one. Raises DiarizationError when the models cannot load; the
+    # runtime stays usable.
+    #
+    # ```
+    # audio = Llamero::Native::AudioRuntime.new
+    # audio.preload_diarizer          # while a meeting is still recording
+    # audio.transcribe_diarized(path) # no model load here
+    # ```
+    def preload_diarizer : Nil
+      ensure_open
+      error : AudioErrorEvent? = nil
+
+      @bridge.preload_diarizer(@runtime_handle) do |frame|
+        event = dispatch(frame)
+        error = event if event.is_a?(AudioErrorEvent)
+      end
+
+      if failure = error
+        raise failure.to_error
+      end
+    end
+
     # Synthesizes speech to a WAV file and returns its location. The first
     # call loads the Kokoro TTS chain (downloading it on first ever use).
     # Without `output_path` the bridge writes to a temporary file.

@@ -221,6 +221,70 @@ describe Llamero::Native::AudioRuntime do
     end
   end
 
+  describe "#preload_diarizer" do
+    it "loads the diarizer models so a later diarized transcription loads none" do
+      runtime, _bridge = mock_audio_runtime
+      events = [] of Llamero::Native::AudioEvent
+      runtime.on_event { |event| events << event }
+
+      runtime.preload_diarizer
+
+      events.count(&.is_a?(Llamero::Native::DiarizerModelLoadStartedEvent)).should eq(1)
+      events.count(&.is_a?(Llamero::Native::DiarizerModelLoadedEvent)).should eq(1)
+      events.clear
+
+      with_temp_wav do |path|
+        runtime.transcribe_diarized(path)
+      end
+      events.count(&.is_a?(Llamero::Native::DiarizerModelLoadStartedEvent)).should eq(0)
+      events.count(&.is_a?(Llamero::Native::DiarizedTranscriptFinalEvent)).should eq(1)
+    end
+
+    it "returns at once when the models are already resident" do
+      runtime, _bridge = mock_audio_runtime
+      runtime.preload_diarizer
+      events = [] of Llamero::Native::AudioEvent
+      runtime.on_event { |event| events << event }
+
+      runtime.preload_diarizer
+
+      events.should be_empty
+    end
+
+    it "loads only the diarizer, not the ASR models" do
+      runtime, _bridge = mock_audio_runtime
+      events = [] of Llamero::Native::AudioEvent
+      runtime.on_event { |event| events << event }
+
+      runtime.preload_diarizer
+
+      events.count(&.is_a?(Llamero::Native::AsrModelLoadStartedEvent)).should eq(0)
+    end
+
+    it "raises on a failed load but keeps the runtime usable" do
+      runtime, bridge = mock_audio_runtime
+      bridge.fail_next_diarizer_preload = true
+
+      expect_raises(Llamero::Native::DiarizationError, /Mock diarizer preload failure/) do
+        runtime.preload_diarizer
+      end
+
+      runtime.preload_diarizer
+      with_temp_wav do |path|
+        runtime.transcribe_diarized(path).text.should eq("mock diarized transcript of #{File.basename(path)}")
+      end
+    end
+
+    it "refuses a closed runtime" do
+      runtime, _bridge = mock_audio_runtime
+      runtime.close
+
+      expect_raises(Llamero::Native::SessionStateError) do
+        runtime.preload_diarizer
+      end
+    end
+  end
+
   describe "#speak" do
     it "writes a playable WAV file at the requested path" do
       runtime, _bridge = mock_audio_runtime

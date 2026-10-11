@@ -12,17 +12,17 @@ module Llamero::Native
   # word of the next scripted utterance per push (see `scripted_utterances`
   # and StreamState below).
   #
-  # ```crystal
+  # ```
   # bridge = Llamero::Native::MockAudioBridge.new
   # bridge.scripted_transcripts << "hello from the mock"
   # audio = Llamero::Native::AudioRuntime.new(bridge: bridge)
   # ```
   class MockAudioBridge < AudioBridge
     # Deterministic metrics every mock operation reports.
-    ASR_LOAD_TIME_MS  = 80.0
-    TTS_LOAD_TIME_MS  = 60.0
-    PROCESSING_TIME_MS = 25.0
-    SYNTHESIS_TIME_MS  = 30.0
+    ASR_LOAD_TIME_MS   =   80.0
+    TTS_LOAD_TIME_MS   =   60.0
+    PROCESSING_TIME_MS =   25.0
+    SYNTHESIS_TIME_MS  =   30.0
     SAMPLE_RATE        = 16_000
     # Synthetic per-word segment timing.
     WORD_SPACING_MS = 500.0
@@ -78,6 +78,7 @@ module Llamero::Native
     # error event (the knob resets automatically; the runtime stays usable).
     property fail_next_transcription = false
     property fail_next_diarization = false
+    property fail_next_diarizer_preload = false
     property fail_next_speak = false
     property fail_next_stream_push = false
     property fail_next_stream_finish = false
@@ -147,6 +148,21 @@ module Llamero::Native
       })
     end
 
+    def preload_diarizer(runtime : Int64, &on_event : JSON::Any ->) : Nil
+      state = runtime_state(runtime)
+
+      if @fail_next_diarizer_preload
+        @fail_next_diarizer_preload = false
+        emit(on_event, runtime, {
+          "event" => "error", "message" => "Mock diarizer preload failure",
+          "code" => "diarization_failed", "recoverable" => true,
+        })
+        return
+      end
+
+      ensure_diarizer_loaded(state, runtime, on_event)
+    end
+
     def transcribe_diarized_file(runtime : Int64, path : String, config_json : String, &on_event : JSON::Any ->) : Nil
       state = runtime_state(runtime)
 
@@ -194,16 +210,16 @@ module Llamero::Native
       end
 
       emit(on_event, runtime, {
-        "event" => "diarized_transcript_final",
-        "text" => text,
-        "segments" => diarized_segments,
-        "word_segments" => word_segments,
-        "speaker_segments" => speaker_segments,
-        "duration_ms" => duration_ms,
-        "processing_time_ms" => PROCESSING_TIME_MS * 2,
-        "asr_processing_time_ms" => PROCESSING_TIME_MS,
+        "event"                          => "diarized_transcript_final",
+        "text"                           => text,
+        "segments"                       => diarized_segments,
+        "word_segments"                  => word_segments,
+        "speaker_segments"               => speaker_segments,
+        "duration_ms"                    => duration_ms,
+        "processing_time_ms"             => PROCESSING_TIME_MS * 2,
+        "asr_processing_time_ms"         => PROCESSING_TIME_MS,
         "diarization_processing_time_ms" => PROCESSING_TIME_MS,
-        "confidence" => 1.0,
+        "confidence"                     => 1.0,
       })
     end
 
@@ -437,13 +453,13 @@ module Llamero::Native
         file.write_bytes((36 + data_size).to_u32, IO::ByteFormat::LittleEndian)
         file << "WAVE"
         file << "fmt "
-        file.write_bytes(16_u32, IO::ByteFormat::LittleEndian)               # fmt chunk size
-        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                # PCM
-        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                # mono
-        file.write_bytes(SAMPLE_RATE.to_u32, IO::ByteFormat::LittleEndian)   # sample rate
+        file.write_bytes(16_u32, IO::ByteFormat::LittleEndian)                   # fmt chunk size
+        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                    # PCM
+        file.write_bytes(1_u16, IO::ByteFormat::LittleEndian)                    # mono
+        file.write_bytes(SAMPLE_RATE.to_u32, IO::ByteFormat::LittleEndian)       # sample rate
         file.write_bytes((SAMPLE_RATE * 2).to_u32, IO::ByteFormat::LittleEndian) # byte rate
-        file.write_bytes(2_u16, IO::ByteFormat::LittleEndian)                # block align
-        file.write_bytes(16_u16, IO::ByteFormat::LittleEndian)               # bits per sample
+        file.write_bytes(2_u16, IO::ByteFormat::LittleEndian)                    # block align
+        file.write_bytes(16_u16, IO::ByteFormat::LittleEndian)                   # bits per sample
         file << "data"
         file.write_bytes(data_size.to_u32, IO::ByteFormat::LittleEndian)
         sample_count.times { file.write_bytes(0_i16, IO::ByteFormat::LittleEndian) }
